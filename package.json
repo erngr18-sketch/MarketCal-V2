@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node ../node_modules/next/dist/bin/next dev -p 3001",
-    "build": "node ../node_modules/next/dist/bin/next build",
-    "start": "node ../node_modules/next/dist/bin/next start -p 3001",
-    "lint": "node ../node_modules/next/dist/bin/next lint",
-    "typecheck": "node ../node_modules/typescript/bin/tsc --noEmit"
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "lint": "next lint",
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "clsx": "^2.1.1",
