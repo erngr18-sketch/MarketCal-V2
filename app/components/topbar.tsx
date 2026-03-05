@@ -7,14 +7,15 @@ const titleMap: Record<string, string> = {
   '/app/dashboard': 'Dashboard',
   '/app/single': 'Tek Ürün Analizi',
   '/app/compare': 'Karşılaştırma',
-  '/app/competition': 'Rekabet Analizi'
+  '/app/competition': 'Rekabet Analizi',
+  '/app/competition/product': 'Rekabet Analizi'
 };
 
 export function Topbar() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const title = titleMap[pathname] ?? 'Panel';
+  const title = pathname.startsWith('/app/competition') ? 'Rekabet Analizi' : (titleMap[pathname] ?? 'Panel');
 
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200/60 bg-white">

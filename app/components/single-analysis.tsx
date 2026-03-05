@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-
-import { TextShimmer } from '@/components/ui/text-shimmer';
+import { useMemo, useState } from 'react';
+import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
 
 type SingleInput = {
   salesPrice: number;
@@ -32,33 +31,13 @@ const initialValues: SingleInput = {
 
 export function SingleAnalysis() {
   const [values, setValues] = useState<SingleInput>(initialValues);
-  const [aiPending, setAiPending] = useState(false);
-  const [aiDelayDone, setAiDelayDone] = useState(true);
-  const [reduceMotion, setReduceMotion] = useState(true);
 
   const result = useMemo(() => calculate(values), [values]);
   const assistantMessage = useMemo(
     () => buildAssistant(result.status, values.campaignEnabled),
     [result.status, values.campaignEnabled]
   );
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    setReduceMotion(window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-  }, []);
-
-  useEffect(() => {
-    if (reduceMotion) return;
-    setAiPending(true);
-    setAiDelayDone(false);
-
-    const t = setTimeout(() => {
-      setAiPending(false);
-      setAiDelayDone(true);
-    }, 700);
-
-    return () => clearTimeout(t);
-  }, [assistantMessage, reduceMotion]);
+  const assistantItems = useMemo(() => toSingleAiPanelItems(assistantMessage, result.status), [assistantMessage, result.status]);
 
   const onNumberChange = (key: keyof Omit<SingleInput, 'campaignEnabled'>, raw: string) => {
     const numeric = Number(raw);
@@ -207,32 +186,7 @@ export function SingleAnalysis() {
       </section>
 
       <aside className="space-y-4 lg:sticky lg:top-6 lg:flex lg:h-full lg:flex-col">
-        <section className="card border border-slate-200 bg-slate-50 p-6 lg:flex-1">
-          <h3 className="card-title">AI Asistan Yorumu</h3>
-          <p className="mt-1 text-xs text-slate-600">
-            Not: Bu analiz tahminidir. Fiyatları ve koşulları panelinizden doğrulayın.
-          </p>
-
-          {!reduceMotion && aiPending && !aiDelayDone ? (
-            <div className="mt-3 space-y-1">
-              <TextShimmer className="text-sm text-slate-600" duration={1.1}>
-                Analiz hazırlanıyor...
-              </TextShimmer>
-              <TextShimmer className="text-sm text-slate-600" duration={1.1}>
-                Maliyet ve kampanya etkileri kontrol ediliyor...
-              </TextShimmer>
-            </div>
-          ) : (
-            <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
-              {assistantMessage.map((line, i) => (
-                <li key={`${line}-${i}`} className="flex items-start gap-2">
-                  <span className="mt-0.5">•</span>
-                  <span>{line}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <AiPanel items={assistantItems} />
 
         <section className="card p-6 lg:flex-1">
           <p className="text-sm font-medium text-slate-500">Net Kâr</p>
@@ -306,6 +260,16 @@ function buildAssistant(status: Status, campaignEnabled: boolean): string[] {
     'Öneri: Önce kampanya maliyetini hafiflet, ardından kargo ve reklam kalemlerinde daha sürdürülebilir bir seviye dene.',
     'Kontrol: Efektif satış fiyatı ve komisyon hesabını adım adım doğrulayarak zarar kaynağını netleştir.'
   ];
+}
+
+function toSingleAiPanelItems(lines: string[], status: Status): AiPanelItem[] {
+  return lines.map((line, index) => {
+    const tone = status === 'loss' ? 'danger' : status === 'weak' ? 'warning' : 'success';
+    if (line.startsWith('Tanı')) return { icon: status === 'loss' ? 'trendDown' : 'trendUp', tone, emphasis: true, text: line };
+    if (line.startsWith('Öneri')) return { icon: 'spark', tone, text: line };
+    if (line.startsWith('Kontrol')) return { icon: 'check', tone: 'neutral', text: line };
+    return { icon: index === 0 ? 'trendUp' : 'info', tone: 'neutral', text: line };
+  });
 }
 
 function statusLabel(status: Status) {
