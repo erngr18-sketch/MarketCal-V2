@@ -8,14 +8,19 @@ const titleMap: Record<string, string> = {
   '/app/single': 'Tek Ürün Analizi',
   '/app/compare': 'Karşılaştırma',
   '/app/competition': 'Rekabet Analizi',
-  '/app/competition/product': 'Rekabet Analizi'
+  '/app/competition/product': 'Rekabet Analizi',
+  '/app/settings': 'Ayarlar'
 };
 
 export function Topbar() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const title = pathname.startsWith('/app/competition') ? 'Rekabet Analizi' : (titleMap[pathname] ?? 'Panel');
+  const title = pathname.startsWith('/app/competition')
+    ? 'Rekabet Analizi'
+    : pathname.startsWith('/app/settings')
+      ? 'Ayarlar'
+      : (titleMap[pathname] ?? 'Panel');
 
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200/60 bg-white">

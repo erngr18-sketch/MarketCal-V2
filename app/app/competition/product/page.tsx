@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
 
 type ProductMode = 'best_sellers' | 'most_reviewed';
+type VatMode = '20' | '10' | '1' | 'custom';
 
 type ProductFormState = {
   mode: ProductMode;
@@ -38,9 +39,19 @@ const INITIAL_STATE: ProductFormState = {
 export default function CompetitionProductPage() {
   const [form, setForm] = useState<ProductFormState>(INITIAL_STATE);
   const [analysis, setAnalysis] = useState<ProductAnalysisResult | null>(null);
+  const [vatMode, setVatMode] = useState<VatMode>('20');
+  const [customVatPercent, setCustomVatPercent] = useState('20');
+  const [vatRate, setVatRate] = useState(0.2);
 
   const linkValidation = useMemo(() => validateTrendyolProductUrl(form.productUrl), [form.productUrl]);
   const parsed = useMemo(() => parseProductInputs(form), [form]);
+  const estimatedNetProfit = useMemo(() => {
+    const netSales = parsed.salesPrice / (1 + vatRate);
+    const commission = netSales * clamp(parsed.commissionRate / 100, 0, 0.9999);
+    const shipping = 0;
+    const ads = 0;
+    return netSales - parsed.costPrice - commission - shipping - ads;
+  }, [parsed, vatRate]);
 
   const canAnalyze =
     form.productUrl.trim().length > 0 &&
@@ -63,6 +74,7 @@ export default function CompetitionProductPage() {
       targetProfit: parsed.targetProfit,
       costPrice: parsed.costPrice,
       commissionRate: parsed.commissionRate,
+      vatRate,
       stats,
       bandLabel
     });
@@ -119,29 +131,98 @@ export default function CompetitionProductPage() {
                 />
               </label>
               <label className="space-y-1.5 text-sm text-slate-700">
-                <span>Hedef Kâr (₺)</span>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  className="input"
-                  value={form.targetProfit}
-                  onChange={(event) => setForm((prev) => ({ ...prev, targetProfit: event.target.value }))}
-                />
-              </label>
-              <label className="space-y-1.5 text-sm text-slate-700">
                 <span>Komisyon (%)</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={99.99}
-                  step={0.01}
-                  className="input"
-                  value={form.commissionRate}
-                  onChange={(event) => setForm((prev) => ({ ...prev, commissionRate: event.target.value }))}
-                />
+                <div className="rounded-xl border border-transparent p-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={99.99}
+                    step={0.01}
+                    className="input border-0 bg-white focus:border-0 focus:ring-0"
+                    value={form.commissionRate}
+                    onChange={(event) => setForm((prev) => ({ ...prev, commissionRate: event.target.value }))}
+                  />
+                </div>
                 {!parsed.commissionValid ? <p className="error-text text-xs text-rose-600">Komisyon %100 üstü olamaz.</p> : null}
               </label>
+              <label className="space-y-1.5 text-sm text-slate-700">
+                <span>Hedef Kâr (₺)</span>
+                <div className="relative overflow-hidden rounded-xl p-[1px]">
+                  <div
+                    className="absolute inset-[-60%] animate-spin"
+                    style={{
+                      background: 'conic-gradient(from 0deg, transparent 0deg, #c4b5fd 90deg, transparent 180deg, #ddd6fe 270deg, transparent 360deg)',
+                      animationDuration: '4s'
+                    }}
+                  />
+                  <div className="relative rounded-[11px] bg-white p-1">
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      className="input border-0 bg-white focus:border-0 focus:ring-0"
+                      value={form.targetProfit}
+                      onChange={(event) => setForm((prev) => ({ ...prev, targetProfit: event.target.value }))}
+                    />
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div className="mt-3">
+              <p className="text-sm text-slate-700">KDV Oranı</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                {[
+                  { mode: '20' as const, label: '%20', rate: 0.2 },
+                  { mode: '10' as const, label: '%10', rate: 0.1 },
+                  { mode: '1' as const, label: '%1', rate: 0.01 }
+                ].map((item) => (
+                  <button
+                    key={item.mode}
+                    type="button"
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                      vatMode === item.mode ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                    onClick={() => {
+                      setVatMode(item.mode);
+                      setVatRate(item.rate);
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+                <label className="flex items-center gap-2 text-xs text-slate-700">
+                  <button
+                    type="button"
+                    className={`rounded-lg border px-2.5 py-1.5 font-semibold ${
+                      vatMode === 'custom' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                    onClick={() => {
+                      setVatMode('custom');
+                      const parsedCustom = Number(customVatPercent);
+                      setVatRate(clamp(Number.isFinite(parsedCustom) ? parsedCustom / 100 : 0, 0, 1));
+                    }}
+                  >
+                    Diğer
+                  </button>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.1}
+                    className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                    value={customVatPercent}
+                    disabled={vatMode !== 'custom'}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setCustomVatPercent(value);
+                      setVatMode('custom');
+                      const parsedCustom = Number(value);
+                      setVatRate(clamp(Number.isFinite(parsedCustom) ? parsedCustom / 100 : 0, 0, 1));
+                    }}
+                  />
+                </label>
+              </div>
             </div>
           </section>
 
@@ -199,6 +280,8 @@ export default function CompetitionProductPage() {
                     <span className="whitespace-nowrap font-medium text-slate-700">Senin fiyatın: {formatTry(analysis.myPrice)}</span>
                     <span>{formatTry(analysis.max)}</span>
                   </div>
+                  <p className="mt-2 text-sm text-slate-600">Tahmini net kâr: {formatTry(estimatedNetProfit)}</p>
+                  <p className="mt-1 text-xs text-slate-500">Kâr hesapları KDV hariç satış tutarı üzerinden yapılır.</p>
                 </div>
               </>
             ) : (
@@ -288,6 +371,7 @@ function buildProductAiLines({
   targetProfit,
   costPrice,
   commissionRate,
+  vatRate,
   stats,
   bandLabel
 }: {
@@ -295,13 +379,17 @@ function buildProductAiLines({
   targetProfit: number;
   costPrice: number;
   commissionRate: number;
+  vatRate: number;
   stats: ReturnType<typeof computeStats>;
   bandLabel: string;
 }) {
   const effectivePrice = myPrice;
+  const netSales = effectivePrice / (1 + clamp(vatRate, 0, 1));
   const commissionRateDecimal = clamp(commissionRate / 100, 0, 0.9999);
-  const commission = effectivePrice * commissionRateDecimal;
-  const estimatedNet = effectivePrice - costPrice - commission;
+  const commission = netSales * commissionRateDecimal;
+  const shipping = 0;
+  const ads = 0;
+  const estimatedNet = netSales - costPrice - commission - shipping - ads;
 
   const lines = [`🧭 Ürün fiyat konumu: ${bandLabel}.`];
 

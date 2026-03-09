@@ -1,6 +1,7 @@
 export type CompareRowInput = {
   marketplaceId: string;
   salesPrice: number;
+  vatRate: number;
   costPrice: number;
   commissionRate: number;
   shippingCost: number;
@@ -20,6 +21,7 @@ export type RowStatus = Exclude<ProfitStatus, 'top'>;
 export type CompareRowResult = {
   marketplaceId: string;
   effectivePrice: number;
+  netSales: number;
   commissionAmount: number;
   netProfit: number;
   status: RowStatus;
@@ -54,6 +56,7 @@ export type CompareEngineOutput = {
 export function calculateCompare(input: CompareEngineInput): CompareEngineOutput {
   const rows: CompareRowResult[] = input.rows.map((row) => {
     const discountRate = clamp(row.discountRate, 0, 100);
+    const vatRate = clamp(row.vatRate, 0, 1);
     let couponValue = Math.max(0, row.couponValue);
 
     // XOR guard: if both are provided, ignore coupon.
@@ -62,21 +65,26 @@ export function calculateCompare(input: CompareEngineInput): CompareEngineOutput
     }
 
     const effectivePrice = Math.max(0, row.salesPrice - row.salesPrice * (discountRate / 100) - couponValue);
+    const netSales = effectivePrice / (1 + vatRate);
     const commissionRate = clamp(row.commissionRate / 100, 0, 0.8);
-    const commissionAmount = effectivePrice * commissionRate;
+    const commissionAmount = netSales * commissionRate;
 
-    const netProfit = effectivePrice - (row.costPrice + row.shippingCost + row.advertisingCost + commissionAmount);
+    const netProfit = netSales - (row.costPrice + row.shippingCost + row.advertisingCost + commissionAmount);
     const status: RowStatus = netProfit < 0 ? 'loss' : netProfit >= row.targetProfit ? 'on_target' : 'borderline';
 
     const dr = discountRate / 100;
     const fixedCosts = row.costPrice + row.shippingCost + row.advertisingCost;
     const denominator = (1 - dr) * (1 - commissionRate);
-    const minRequiredSalesPrice = denominator <= 0 ? 0 : round2((row.targetProfit + fixedCosts + couponValue * (1 - commissionRate)) / denominator);
+    const minRequiredSalesPrice =
+      denominator <= 0
+        ? 0
+        : round2((couponValue + ((row.targetProfit + fixedCosts) * (1 + vatRate)) / Math.max(0.0001, 1 - commissionRate)) / Math.max(0.0001, 1 - dr));
     const alreadyAboveMinPrice = row.salesPrice >= minRequiredSalesPrice;
 
     return {
       marketplaceId: row.marketplaceId,
       effectivePrice,
+      netSales,
       commissionAmount,
       netProfit,
       status,

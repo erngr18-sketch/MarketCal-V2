@@ -1,4 +1,8 @@
 import type { ProfitStatus } from '@/lib/profit/compare-engine';
+import {
+  validateTrendyolUrl as sharedValidateTrendyolUrl,
+  type UrlValidationResult as SharedUrlValidationResult
+} from '@/lib/shared/validate-trendyol-url';
 
 export type CompetitionMode = 'best_sellers' | 'most_reviewed';
 export type CompetitionDataSource = 'simulation' | 'manual';
@@ -25,11 +29,7 @@ export type CompetitionInput = {
   manualPrices?: CompetitionManualPrices;
 };
 
-export type UrlValidationResult = {
-  ok: boolean;
-  reason?: string;
-  normalizedUrl?: string;
-};
+export type UrlValidationResult = SharedUrlValidationResult;
 
 export type CompetitionOutput = {
   mode: CompetitionMode;
@@ -44,56 +44,10 @@ export type CompetitionOutput = {
   normalizedUrl?: string;
 };
 
-const ALLOWED_HOSTS = new Set(['trendyol.com', 'www.trendyol.com']);
 const NOISE_PARAM_NAMES = new Set(['gclid', 'fbclid']);
 
 export function validateTrendyolUrl(rawUrl: string): UrlValidationResult {
-  const trimmed = rawUrl.trim();
-  if (!trimmed) {
-    return { ok: false };
-  }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
-    return { ok: false, reason: 'Geçersiz URL' };
-  }
-
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    return { ok: false, reason: 'URL yalnızca http/https olabilir.' };
-  }
-
-  if (!ALLOWED_HOSTS.has(parsed.hostname.toLowerCase())) {
-    return { ok: false, reason: 'Sadece trendyol.com veya www.trendyol.com kabul edilir.' };
-  }
-
-  const pathname = parsed.pathname.toLowerCase();
-  const full = parsed.toString().toLowerCase();
-
-  if (pathname.includes('-p-') || full.includes('-p-')) {
-    return { ok: false, reason: 'Ürün linki değil, kategori/arama linki girin.' };
-  }
-
-  const isSearchPath = pathname === '/sr' || pathname === '/sr/';
-  const isCategoryPath = pathname.startsWith('/butik/liste') || pathname.startsWith('/kategori');
-
-  if (!isSearchPath && !isCategoryPath) {
-    return { ok: false, reason: 'Geçersiz Trendyol kategori/arama linki.' };
-  }
-
-  if (isSearchPath) {
-    const hasSearchQuery = ['q', 'qt', 'st'].some((key) => {
-      const value = parsed.searchParams.get(key);
-      return typeof value === 'string' && value.trim().length > 0;
-    });
-    if (!hasSearchQuery) return { ok: false, reason: 'Geçersiz arama linki (q/qt/st yok).' };
-  }
-
-  return {
-    ok: true,
-    normalizedUrl: normalizeTrendyolUrl(parsed)
-  };
+  return sharedValidateTrendyolUrl(rawUrl);
 }
 
 export function normalizeTrendyolUrl(urlOrRaw: string | URL): string {

@@ -16,6 +16,7 @@ const MARKETPLACES = [
 type MarketplaceId = (typeof MARKETPLACES)[number]['id'];
 
 type ProfitRank = 'top' | 'profit' | 'weak' | 'loss';
+type VatMode = '20' | '10' | '1' | 'custom';
 
 type GlobalValues = {
   salesPrice: number;
@@ -59,6 +60,16 @@ const INITIAL_ROWS: CompareCardState[] = ['trendyol', 'hepsiburada'].map((id) =>
 export default function ComparePage() {
   const [globals, setGlobals] = useState<GlobalValues>(INITIAL_GLOBALS);
   const [rows, setRows] = useState<CompareCardState[]>(INITIAL_ROWS);
+  const [vatMode, setVatMode] = useState<VatMode>('20');
+  const [customVatPercent, setCustomVatPercent] = useState('20');
+
+  const vatRate = useMemo(() => {
+    if (vatMode === 'custom') {
+      const parsed = Number(customVatPercent);
+      return clamp(Number.isFinite(parsed) ? parsed / 100 : 0, 0, 1);
+    }
+    return Number(vatMode) / 100;
+  }, [customVatPercent, vatMode]);
 
   const usedMarketplaces = new Set(rows.map((row) => row.marketplaceId));
   const addableMarketplaces = MARKETPLACES.filter((marketplace) => !usedMarketplaces.has(marketplace.id));
@@ -74,13 +85,14 @@ export default function ComparePage() {
           costPrice: globals.costPrice,
           targetProfit: globals.targetProfit,
           commissionRate: clamp(row.commissionRate, 0, 80),
+          vatRate,
           shippingCost: row.shippingCost,
           advertisingCost: hasOverride ? Math.max(0, parsedOverride) : globals.defaultAdvertisingCost,
           discountRate: row.campaignEnabled ? row.discountRate : 0,
           couponValue: row.campaignEnabled ? row.couponValue : 0
         };
       }),
-    [globals, rows]
+    [globals, rows, vatRate]
   );
 
   const result = useMemo(() => calculateCompare({ rows: engineRows }), [engineRows]);
@@ -209,22 +221,99 @@ export default function ComparePage() {
             </div>
             <div className="grid gap-3 md:grid-cols-4">
               <Field label="Satış Fiyatı (₺)">
-                <input type="number" className="input" value={globals.salesPrice} onChange={(e) => onGlobalChange('salesPrice', e.target.value)} />
+                <div className="rounded-xl border border-transparent p-1">
+                  <input
+                    type="number"
+                    className="input border-0 bg-white focus:border-0 focus:ring-0"
+                    value={globals.salesPrice}
+                    onChange={(e) => onGlobalChange('salesPrice', e.target.value)}
+                  />
+                </div>
               </Field>
               <Field label="Ürün Maliyeti (₺)">
-                <input type="number" className="input" value={globals.costPrice} onChange={(e) => onGlobalChange('costPrice', e.target.value)} />
+                <div className="rounded-xl border border-transparent p-1">
+                  <input
+                    type="number"
+                    className="input border-0 bg-white focus:border-0 focus:ring-0"
+                    value={globals.costPrice}
+                    onChange={(e) => onGlobalChange('costPrice', e.target.value)}
+                  />
+                </div>
               </Field>
               <Field label="Varsayılan Reklam (₺)">
-                <input
-                  type="number"
-                  className="input"
-                  value={globals.defaultAdvertisingCost}
-                  onChange={(e) => onGlobalChange('defaultAdvertisingCost', e.target.value)}
-                />
+                <div className="rounded-xl border border-transparent p-1">
+                  <input
+                    type="number"
+                    className="input border-0 bg-white focus:border-0 focus:ring-0"
+                    value={globals.defaultAdvertisingCost}
+                    onChange={(e) => onGlobalChange('defaultAdvertisingCost', e.target.value)}
+                  />
+                </div>
               </Field>
               <Field label="Hedef Kâr (₺)">
-                <input type="number" className="input" value={globals.targetProfit} onChange={(e) => onGlobalChange('targetProfit', e.target.value)} />
+                <div className="relative overflow-hidden rounded-xl p-[1px]">
+                  <div
+                    className="absolute inset-[-60%] animate-spin"
+                    style={{
+                      background: 'conic-gradient(from 0deg, transparent 0deg, #c4b5fd 90deg, transparent 180deg, #ddd6fe 270deg, transparent 360deg)',
+                      animationDuration: '4s'
+                    }}
+                  />
+                  <div className="relative rounded-[11px] bg-white p-1">
+                    <input
+                      type="number"
+                      className="input border-0 bg-white focus:border-0 focus:ring-0"
+                      value={globals.targetProfit}
+                      onChange={(e) => onGlobalChange('targetProfit', e.target.value)}
+                    />
+                  </div>
+                </div>
               </Field>
+            </div>
+            <div className="mt-3">
+              <p className="text-sm text-slate-700">KDV Oranı</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                {[
+                  { mode: '20' as const, label: '%20' },
+                  { mode: '10' as const, label: '%10' },
+                  { mode: '1' as const, label: '%1' }
+                ].map((item) => (
+                  <button
+                    key={item.mode}
+                    type="button"
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                      vatMode === item.mode ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                    onClick={() => setVatMode(item.mode)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+                <label className="flex items-center gap-2 text-xs text-slate-700">
+                  <button
+                    type="button"
+                    className={`rounded-lg border px-2.5 py-1.5 font-semibold ${
+                      vatMode === 'custom' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                    onClick={() => setVatMode('custom')}
+                  >
+                    Diğer
+                  </button>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.1}
+                    className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                    value={customVatPercent}
+                    disabled={vatMode !== 'custom'}
+                    onChange={(event) => {
+                      setVatMode('custom');
+                      setCustomVatPercent(event.target.value);
+                    }}
+                  />
+                </label>
+              </div>
             </div>
           </section>
 
@@ -360,6 +449,7 @@ export default function ComparePage() {
 
           <section className="card p-5">
             <h3 className="card-title">Özet</h3>
+            <p className="mt-1 text-xs text-slate-500">Kâr hesapları KDV hariç satış tutarı üzerinden yapılır.</p>
             <div className="mt-3 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-1">
               <ResultItem label="Toplam Net Kâr" value={formatCurrency(result.summary.totalNetProfit)} />
               <ResultItem label="Ortalama Net Kâr" value={formatCurrency(result.summary.averageNetProfit)} />
