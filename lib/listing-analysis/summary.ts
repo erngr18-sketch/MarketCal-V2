@@ -71,7 +71,7 @@ export function buildDeterministicSummary(input: ListingAnalysisSummaryInput): D
   return {
     headline: headlineByBand(input.bandLabel),
     bullets: bullets.filter(Boolean).slice(0, 3),
-    warning: 'Analiz sonucu yol göstericidir; kritik karar öncesi verileri kontrol edin.',
+    warning: 'Bu analiz yol göstericidir; karar vermeden önce verileri kontrol et.',
     confidence,
     confidenceLabel: confidenceLabel(confidence)
   };
@@ -90,12 +90,21 @@ function getListingSummaryProvider(): ListingSummaryProvider {
 }
 
 function shouldUseAI(input: ListingAnalysisSummaryInput): boolean {
-  return Boolean(input.usedRealAnalysis && !input.usedFallback);
+  const hasRealAnalysis = Boolean(input.usedRealAnalysis && !input.usedFallback);
+  if (!hasRealAnalysis) return false;
+
+  const enoughCoverage = (input.pricesCount ?? 0) >= 12;
+  const hasMeaningfulTension =
+    (typeof input.netProfit === 'number' && input.netProfit < 0) ||
+    (typeof input.targetGap === 'number' && input.targetGap < 0) ||
+    hasMeaningfulPriceDelta(input);
+
+  return enoughCoverage && hasMeaningfulTension;
 }
 
 function headlineByBand(bandLabel: string): string {
-  if (bandLabel === 'Alt Bant') return 'Fiyatın pazarın alt bandında görünüyor.';
-  if (bandLabel === 'Üst Bant') return 'Fiyatın pazarın üst bandında görünüyor.';
+  if (bandLabel === 'Alt Bant') return 'Fiyatın pazarın alt bandına yakın görünüyor.';
+  if (bandLabel === 'Üst Bant') return 'Fiyatın pazarın üst bandına yakın görünüyor.';
   return 'Fiyatın pazar ortalığına yakın görünüyor.';
 }
 
@@ -106,8 +115,8 @@ function profitBullet(input: ListingAnalysisSummaryInput): string {
   if (input.netProfit < 0) {
     return 'Mevcut senaryoda net kâr negatif görünüyor.';
   }
-  if (input.netProfit < Math.max(25, input.myPrice * 0.05)) {
-    return 'Mevcut senaryoda net kâr pozitife yakın görünüyor.';
+  if (Math.abs(input.netProfit) < Math.max(15, input.myPrice * 0.03)) {
+    return 'Mevcut senaryoda kârlılık oldukça sınırlı görünüyor.';
   }
   return 'Mevcut senaryoda net kâr pozitif görünüyor.';
 }
@@ -130,16 +139,15 @@ function suggestedPriceBullet(input: ListingAnalysisSummaryInput): string {
   }
 
   const delta = input.suggestedPrice - input.myPrice;
-  if (delta >= 1) {
+  const meaningfulDelta = Math.max(10, input.myPrice * 0.03);
+
+  if (delta >= meaningfulDelta) {
     return `Yaklaşık ${formatTry(input.suggestedPrice)} seviyesi daha güvenli olabilir.`;
   }
-  if (delta <= -1) {
-    return `Yaklaşık ${formatTry(input.suggestedPrice)} seviyesi daha dengeli olabilir.`;
+  if (delta <= -meaningfulDelta) {
+    return 'Daha düşük bir fiyat seviyesi de kârlılığı koruyabilir.';
   }
-  if (input.bandLabel === 'Üst Bant') {
-    return 'Küçük bir fiyat denemesi satış ihtimalini destekleyebilir.';
-  }
-  return 'Bu fiyatı küçük adımlarla test ederek ilerleyebilirsin.';
+  return '';
 }
 
 function confidenceFromInput(input: ListingAnalysisSummaryInput): SummaryConfidence {
@@ -156,6 +164,14 @@ function confidenceLabel(confidence: SummaryConfidence): string {
   if (confidence === 'high') return 'Yüksek güven';
   if (confidence === 'medium') return 'Orta güven';
   return 'Düşük güven';
+}
+
+function hasMeaningfulPriceDelta(input: ListingAnalysisSummaryInput): boolean {
+  if (typeof input.suggestedPrice !== 'number' || input.suggestedPrice <= 0) {
+    return false;
+  }
+
+  return Math.abs(input.suggestedPrice - input.myPrice) >= Math.max(10, input.myPrice * 0.03);
 }
 
 function normalizeSummary(summary: string): string {

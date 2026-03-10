@@ -196,6 +196,9 @@ export default function CompetitionPage() {
   const aiItems = useMemo(() => {
     const items: AiPanelItem[] = [];
     const deterministicText = deterministicSummary ? stringifyDeterministicSummary(deterministicSummary) : '';
+    const deterministicTexts = deterministicSummary
+      ? [deterministicSummary.headline, ...deterministicSummary.bullets, deterministicSummary.warning]
+      : [];
 
     if (deterministicSummary) {
       items.push({
@@ -235,34 +238,42 @@ export default function CompetitionPage() {
     const profitability = profit.netProfit;
     const distance = profit.distanceToTarget;
     if (parsed.myPrice > 0 && parsed.costPrice > 0) {
-      items.push({
-        icon: profit.priceSufficientForTarget ? 'check' : 'target',
-        tone: profit.priceSufficientForTarget ? 'success' : 'warning',
-        text: profit.priceSufficientForTarget
-          ? 'Mevcut fiyat hem pazarda makul hem de hedef kâr açısından yeterli görünüyor.'
-          : 'Bu fiyat pazarda dengeli görünse de hedef kâr için satış fiyatını artırman gerekebilir.'
-      });
-      items.push({
-        icon: distance <= 0 ? 'target' : 'alert',
-        tone: distance <= 0 ? 'success' : 'warning',
-        text:
-          distance <= 0
-            ? `Hedef kâr karşılanıyor (${profit.statusLabel}).`
-            : `Hedefe uzaklık: ${formatTry(distance)} (${profit.statusLabel}).`
-      });
-      items.push({
-        icon: profitability >= 0 ? 'check' : 'alert',
-        tone: profitability >= 0 ? 'success' : 'danger',
-        text:
-          profitability >= 0
-            ? `Maliyet ve gider varsayımıyla tahmini kâr: ${formatTry(profitability)}.`
-            : `Maliyet ve gider varsayımıyla tahmini sonuç: ${formatTry(profitability)} (zarar riski).`
-      });
-      items.push({
-        icon: 'check',
-        tone: 'neutral',
-        text: 'Hesaplama KDV hariç net satış üzerinden yapılır.'
-      });
+      const profitabilityItems: AiPanelItem[] = [
+        {
+          icon: profit.priceSufficientForTarget ? 'check' : 'target',
+          tone: profit.priceSufficientForTarget ? 'success' : 'warning',
+          text: profit.priceSufficientForTarget
+            ? 'Mevcut fiyat hedef kâr açısından yeterli görünüyor.'
+            : 'Hedef kâra yaklaşmak için fiyatı yeniden gözden geçirmek gerekebilir.'
+        },
+        {
+          icon: distance <= 0 ? 'target' : 'alert',
+          tone: distance <= 0 ? 'success' : 'warning',
+          text:
+            distance <= 0
+              ? `Hedef kâr karşılanıyor (${profit.statusLabel}).`
+              : `Hedefe uzaklık: ${formatTry(distance)} (${profit.statusLabel}).`
+        },
+        {
+          icon: profitability >= 0 ? 'check' : 'alert',
+          tone: profitability >= 0 ? 'success' : 'danger',
+          text:
+            profitability >= 0
+              ? `Tahmini net kâr: ${formatTry(profitability)}.`
+              : `Tahmini sonuç: ${formatTry(profitability)} (zarar riski).`
+        },
+        {
+          icon: 'check',
+          tone: 'neutral',
+          text: 'Hesaplama KDV hariç net satış üzerinden yapılır.'
+        }
+      ];
+
+      items.push(
+        ...profitabilityItems.filter((item) =>
+          !deterministicTexts.some((text) => areMessagesOverlapping(item.text, text))
+        )
+      );
     }
 
     if (!analysis && result?.assistantMessage) {
@@ -280,7 +291,7 @@ export default function CompetitionPage() {
     const uniqueItems: AiPanelItem[] = [];
     const seen = new Set<string>();
     for (const item of items) {
-      const normalizedText = item.text.trim().toLocaleLowerCase('tr');
+      const normalizedText = normalizePanelText(item.text);
       if (seen.has(normalizedText)) continue;
       seen.add(normalizedText);
       uniqueItems.push(item);
@@ -529,7 +540,7 @@ export default function CompetitionPage() {
         </section>
 
         <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-          {deterministicSummary ? <p className="px-1 text-xs text-slate-500">Güven seviyesi: {deterministicSummary.confidenceLabel}</p> : null}
+          {deterministicSummary ? <p className="px-1 text-xs text-slate-500">Güven seviyesi: {deterministicSummary.confidenceLabel} · {getConfidenceHelper(deterministicSummary.confidence)}</p> : null}
           <AiPanel items={aiItems} />
 
           <section className="card p-5">
@@ -742,7 +753,37 @@ function displayPosition(value: number, min: number, max: number): number {
 }
 
 function normalizePanelText(value: string): string {
-  return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr');
+  return value
+    .trim()
+    .toLocaleLowerCase('tr')
+    .replace(/[.,;:!()?]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function areMessagesOverlapping(left: string, right: string): boolean {
+  const normalizedLeft = normalizePanelText(left);
+  const normalizedRight = normalizePanelText(right);
+
+  if (normalizedLeft === normalizedRight) return true;
+
+  const overlapPairs = [
+    ['hedef kâr', 'hedef kâr'],
+    ['net kâr', 'net kâr'],
+    ['kârlılık', 'net kâr'],
+    ['daha güvenli olabilir', 'yeniden gözden geçirmek'],
+    ['zarar riski', 'net kâr negatif']
+  ] as const;
+
+  return overlapPairs.some(
+    ([leftNeedle, rightNeedle]) =>
+      normalizedLeft.includes(leftNeedle) && normalizedRight.includes(rightNeedle)
+  );
+}
+
+function getConfidenceHelper(confidence: DeterministicSummary['confidence']): string {
+  if (confidence === 'high') return 'gerçek listing verisi yeterli sayıda fiyat içeriyor';
+  if (confidence === 'medium') return 'gerçek listing verisi var ama sınırlı';
+  return 'fallback veya simülasyon kullanılıyor';
 }
 
 async function analyzeListing(input: {
