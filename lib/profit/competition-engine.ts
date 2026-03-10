@@ -1,4 +1,5 @@
 import type { ProfitStatus } from '@/lib/profit/compare-engine';
+import { validateListingUrl } from '@/lib/listing-analysis/validate-url';
 
 export type CompetitionMode = 'best_sellers' | 'most_reviewed';
 export type CompetitionDataSource = 'simulation' | 'manual';
@@ -18,17 +19,11 @@ export type CompetitionManualPrices = {
 };
 
 export type CompetitionInput = {
-  url?: string;
+  listingUrl?: string;
   mode: CompetitionMode;
   myPrice: number;
   source: CompetitionDataSource;
   manualPrices?: CompetitionManualPrices;
-};
-
-export type UrlValidationResult = {
-  ok: boolean;
-  reason?: string;
-  normalizedUrl?: string;
 };
 
 export type CompetitionOutput = {
@@ -44,72 +39,9 @@ export type CompetitionOutput = {
   normalizedUrl?: string;
 };
 
-const ALLOWED_HOSTS = new Set(['trendyol.com', 'www.trendyol.com']);
-const NOISE_PARAM_NAMES = new Set(['gclid', 'fbclid']);
-
-export function validateTrendyolUrl(rawUrl: string): UrlValidationResult {
-  const trimmed = rawUrl.trim();
-  if (!trimmed) {
-    return { ok: false, reason: 'Bu alan için Trendyol linki gerekiyor.' };
-  }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
-    return { ok: false, reason: 'Link okunamadı. Trendyol kategori veya arama sonucu linki gir.' };
-  }
-
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    return { ok: false, reason: 'Link okunamadı. Trendyol kategori veya arama sonucu linki gir.' };
-  }
-
-  if (!ALLOWED_HOSTS.has(parsed.hostname.toLowerCase())) {
-    return { ok: false, reason: 'Bu alan için Trendyol linki gerekiyor.' };
-  }
-
-  const pathname = parsed.pathname.toLowerCase();
-  const full = parsed.toString().toLowerCase();
-
-  if (pathname.includes('-p-') || full.includes('-p-')) {
-    return { ok: false, reason: 'Ürün sayfası değil, kategori ya da arama sonucu linki gir.' };
-  }
-
-  const isSearchPath = pathname === '/sr' || pathname === '/sr/';
-  const isCategoryPath = pathname.startsWith('/butik/liste') || pathname.startsWith('/kategori');
-
-  if (!isSearchPath && !isCategoryPath) {
-    return { ok: false, reason: 'Link okunamadı. Trendyol kategori veya arama sonucu linki gir.' };
-  }
-
-  if (isSearchPath) {
-    const hasSearchQuery = ['q', 'qt', 'st'].some((key) => {
-      const value = parsed.searchParams.get(key);
-      return typeof value === 'string' && value.trim().length > 0;
-    });
-    if (!hasSearchQuery) return { ok: false, reason: 'Arama sonucu linki eksik veya hatalı görünüyor.' };
-  }
-
-  return {
-    ok: true,
-    normalizedUrl: normalizeTrendyolUrl(parsed)
-  };
-}
-
-export function normalizeTrendyolUrl(urlOrRaw: string | URL): string {
-  const parsed = typeof urlOrRaw === 'string' ? new URL(urlOrRaw.trim()) : new URL(urlOrRaw.toString());
-  const params = Array.from(parsed.searchParams.entries())
-    .filter(([key]) => !key.toLowerCase().startsWith('utm_') && !NOISE_PARAM_NAMES.has(key.toLowerCase()))
-    .sort(([a], [b]) => a.localeCompare(b, 'tr'));
-
-  const normalizedParams = new URLSearchParams(params);
-  const query = normalizedParams.toString();
-  return `${parsed.protocol}//${parsed.hostname}${parsed.pathname}${query ? `?${query}` : ''}`;
-}
-
 export function runCompetition(input: CompetitionInput): CompetitionOutput {
   const safeMyPrice = Math.max(0, round2(input.myPrice));
-  const validation = validateTrendyolUrl(input.url ?? '');
+  const validation = validateListingUrl(input.listingUrl ?? '');
 
   if (!validation.ok) {
     throw new Error(validation.reason ?? 'Link okunamadı. Trendyol kategori veya arama sonucu linki gir.');
@@ -238,9 +170,9 @@ function segmentLabel(segment: ProfitStatus): string {
 }
 
 function bandLabelByPrice(price: number, stats: CompetitionStats): string {
-  if (price < stats.q1) return 'Q1 altı';
-  if (price <= stats.q3) return 'Q1-Q3 arası';
-  return 'Q3 üstü';
+  if (price < stats.q1) return 'Alt Bant';
+  if (price <= stats.q3) return 'Orta Seviye';
+  return 'Üst Bant';
 }
 
 function normalizePosition(value: number, min: number, max: number): number {

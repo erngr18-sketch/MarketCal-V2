@@ -2,19 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
-import {
-  formatTry,
-  runCompetition,
-  validateTrendyolUrl,
-  type CompetitionMode,
-  type CompetitionOutput
-} from '@/lib/profit/competition-engine';
+import { formatTry, runCompetition, type CompetitionMode, type CompetitionOutput } from '@/lib/profit/competition-engine';
+import { validateListingUrl } from '@/lib/listing-analysis/validate-url';
 import { calculateVatAwarePricing } from '@/lib/profit/pricing-engine';
 
 const EXAMPLE_TRENDYOL_SR_URL = 'https://www.trendyol.com/sr?qt=kazak&st=kazak';
 
 type FormState = {
-  url: string;
+  listingUrl: string;
   mode: CompetitionMode;
   myPrice: string;
   costPrice: string;
@@ -30,7 +25,7 @@ type FormState = {
 };
 
 type ValidationState = {
-  url?: string;
+  listingUrl?: string;
   myPrice?: string;
   costPrice?: string;
   commissionRate?: string;
@@ -39,7 +34,7 @@ type ValidationState = {
 };
 
 const INITIAL_STATE: FormState = {
-  url: EXAMPLE_TRENDYOL_SR_URL,
+  listingUrl: EXAMPLE_TRENDYOL_SR_URL,
   mode: 'best_sellers',
   myPrice: '',
   costPrice: '',
@@ -77,7 +72,7 @@ export default function CompetitionPage() {
 
   const parsed = useMemo(() => parseInputs(form), [form]);
   const profit = useMemo(() => calculateProfitMetrics(parsed), [parsed]);
-  const urlValidation = useMemo(() => validateTrendyolUrl(form.url), [form.url]);
+  const urlValidation = useMemo(() => validateListingUrl(form.listingUrl), [form.listingUrl]);
 
   const canRun = useMemo(() => {
     if (!urlValidation.ok) return false;
@@ -91,8 +86,8 @@ export default function CompetitionPage() {
   const onRunAnalysis = () => {
     const nextErrors: ValidationState = {};
 
-    if (!form.url.trim() || !urlValidation.ok) {
-      nextErrors.url = urlValidation.reason ?? 'Geçerli bir Trendyol linki girin.';
+    if (!form.listingUrl.trim() || !urlValidation.ok) {
+      nextErrors.listingUrl = urlValidation.reason ?? 'Geçerli bir Trendyol listing linki girin.';
     }
     if (!(parsed.myPrice > 0)) {
       nextErrors.myPrice = 'Satış fiyatı girmelisin.';
@@ -116,7 +111,7 @@ export default function CompetitionPage() {
       const useManual = form.manualOpen && parsed.manualValid;
 
       const output = runCompetition({
-        url: form.url,
+        listingUrl: form.listingUrl,
         mode: form.mode,
         source: useManual ? 'manual' : 'simulation',
         myPrice: parsed.myPrice,
@@ -307,17 +302,17 @@ export default function CompetitionPage() {
           </div>
 
           <div className="mt-5 space-y-4 border-t border-slate-200 pt-4">
-            <Field label="Trendyol Link">
+            <Field label="Listing Linki">
               <input
                 type="url"
                 className="input"
-                value={form.url}
-                onChange={(event) => setForm((prev) => ({ ...prev, url: event.target.value }))}
+                value={form.listingUrl}
+                onChange={(event) => setForm((prev) => ({ ...prev, listingUrl: event.target.value }))}
                 placeholder={EXAMPLE_TRENDYOL_SR_URL}
               />
-              {!form.url.trim() ? <p className="helper-text text-xs text-slate-500">Örnek: {EXAMPLE_TRENDYOL_SR_URL}</p> : null}
-              {form.url.trim() && !urlValidation.ok ? <p className="error-text text-xs text-rose-600">{errors.url ?? urlValidation.reason}</p> : null}
-              {form.url.trim() && urlValidation.ok ? <p className="success-text text-xs text-emerald-600">Geçerli Trendyol linki</p> : null}
+              {!form.listingUrl.trim() ? <p className="helper-text text-xs text-slate-500">Şu an Trendyol listing linkleri destekleniyor. Örnek: {EXAMPLE_TRENDYOL_SR_URL}</p> : null}
+              {form.listingUrl.trim() && !urlValidation.ok ? <p className="error-text text-xs text-rose-600">{errors.listingUrl ?? urlValidation.reason}</p> : null}
+              {form.listingUrl.trim() && urlValidation.ok ? <p className="success-text text-xs text-emerald-600">Geçerli listing linki</p> : null}
             </Field>
 
             <div className="space-y-2 text-sm text-slate-700">
@@ -416,12 +411,12 @@ export default function CompetitionPage() {
           <section className="card p-5">
             <div className="flex items-center justify-between gap-2">
               <h3 className="card-title">Fiyatının Pazardaki Yeri</h3>
-              {result ? <CompetitionRankBadge segmentLabel={profit.statusLabel} /> : null}
+              {result ? <CompetitionRankBadge segmentLabel={result.segmentLabel} /> : null}
             </div>
 
             {result ? (
               <>
-                <p className="mt-1 text-sm text-slate-600">Bu fiyat pazardaki ürünlerin yaklaşık %{result.myPercentile}'sinden daha pahalı.</p>
+                <p className="mt-1 text-sm text-slate-600">{describeMarketPosition(result.myPercentile)}</p>
 
                 <div className="mt-4">
                   <div className="relative h-2 rounded-full bg-slate-100">
@@ -433,7 +428,7 @@ export default function CompetitionPage() {
 
                   <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
                     <Pill label="Alt Bant" value={formatTry(result.stats.q1)} />
-                    <Pill label="Orta Bant" value={formatTry(result.stats.median)} />
+                    <Pill label="Orta Seviye" value={formatTry(result.stats.median)} />
                     <Pill label="Üst Bant" value={formatTry(result.stats.q3)} />
                   </div>
                   <div className="mt-2 space-y-1 text-[11px] text-slate-500">
@@ -448,7 +443,7 @@ export default function CompetitionPage() {
                   <ResultBlock label="Net Satış (KDV Hariç)" value={formatTry(profit.netSales)} />
                   <ResultBlock label="Komisyon" value={formatTry(profit.commissionAmount)} />
                   <ResultBlock label="Net Kâr" value={formatTry(profit.netProfit)} emphasis />
-                  <ResultBlock label="Hedef Kâr Farkı" value={profit.targetGapLabel} />
+                  <ResultBlock label="Hedef Kâr Farkı" value={formatTry(profit.targetGap)} />
                   <ResultBlock label="Önerilen Satış Fiyatı" value={formatTry(profit.suggestedPrice)} accent />
                 </div>
                 <div className="mt-2 space-y-1">
@@ -568,7 +563,6 @@ function calculateProfitMetrics(parsed: ReturnType<typeof parseInputs>) {
   const priceSufficientForTarget = parsed.myPrice >= pricing.suggestedSalesPrice;
 
   const statusLabel = pricing.netProfit >= parsed.targetProfit ? 'Hedefte' : pricing.netProfit >= 0 ? 'Sınırda' : 'Zararda';
-  const targetGapLabel = pricing.targetGap >= 0 ? 'Hedef kârı karşılıyor.' : 'Hedef kârın altında.';
   const targetGapHelper = pricing.targetGap >= 0 ? 'Hedef kârı karşılıyor.' : 'Hedef kârın altında.';
   const suggestedPriceMessage = priceSufficientForTarget
     ? 'Mevcut fiyat hedef kâr için yeterli görünüyor.'
@@ -580,7 +574,6 @@ function calculateProfitMetrics(parsed: ReturnType<typeof parseInputs>) {
     netProfit: pricing.netProfit,
     distanceToTarget,
     targetGap: pricing.targetGap,
-    targetGapLabel,
     targetGapHelper,
     suggestedPrice: pricing.suggestedSalesPrice,
     suggestedPriceMessage,
@@ -592,6 +585,16 @@ function calculateProfitMetrics(parsed: ReturnType<typeof parseInputs>) {
 function positionPercent(value: number, min: number, max: number): number {
   if (!Number.isFinite(value) || !Number.isFinite(min) || !Number.isFinite(max) || max <= min) return 50;
   return clamp(((value - min) / (max - min)) * 100, 0, 100);
+}
+
+function describeMarketPosition(percentile: number): string {
+  if (percentile < 40) {
+    return `Bu fiyat pazardaki ürünlerin yaklaşık %${percentile}'inden daha ucuz.`;
+  }
+  if (percentile <= 60) {
+    return 'Bu fiyat pazardaki ürünlerin ortalama seviyesine yakın.';
+  }
+  return `Bu fiyat pazardaki ürünlerin yaklaşık %${percentile}'inden daha pahalı.`;
 }
 
 function parseNumber(value: string): number {

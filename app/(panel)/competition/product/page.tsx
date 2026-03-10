@@ -257,7 +257,7 @@ export default function CompetitionProductPage() {
                   <ResultBlock label="Net Satış (KDV Hariç)" value={formatTry(summary.netSales)} />
                   <ResultBlock label="Komisyon" value={formatTry(summary.commission)} />
                   <ResultBlock label="Net Kâr" value={formatTry(summary.netProfit)} emphasis />
-                  <ResultBlock label="Hedef Kâr Farkı" value={summary.targetGapLabel} />
+                  <ResultBlock label="Hedef Kâr Farkı" value={formatTry(summary.targetGap)} />
                 </div>
               </>
             ) : (
@@ -316,8 +316,7 @@ function calculateProfitSummary(parsed: ReturnType<typeof parseProductInputs>) {
     netSales: pricing.netSales,
     commission: pricing.commissionAmount,
     netProfit: pricing.netProfit,
-    targetGap: pricing.targetGap,
-    targetGapLabel: pricing.targetGap >= 0 ? 'Hedef kârı karşılıyor.' : 'Hedef kârın altında.'
+    targetGap: pricing.targetGap
   };
 }
 
