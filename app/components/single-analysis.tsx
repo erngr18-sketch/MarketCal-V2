@@ -10,6 +10,7 @@ type SingleInput = {
   shippingCost: number;
   advertisingCost: number;
   targetProfit: number;
+  vatRate: number;
   campaignEnabled: boolean;
   discountRate: number;
   couponValue: number;
@@ -24,13 +25,17 @@ const initialValues: SingleInput = {
   shippingCost: 10,
   advertisingCost: 10,
   targetProfit: 15,
+  vatRate: 20,
   campaignEnabled: false,
   discountRate: 0,
   couponValue: 0
 };
 
+const VAT_PRESETS = [20, 10, 1] as const;
+
 export function SingleAnalysis() {
   const [values, setValues] = useState<SingleInput>(initialValues);
+  const isCustomVat = !VAT_PRESETS.includes(values.vatRate as (typeof VAT_PRESETS)[number]);
 
   const result = useMemo(() => calculate(values), [values]);
   const assistantMessage = useMemo(
@@ -48,6 +53,7 @@ export function SingleAnalysis() {
 
       next.commissionRate = clamp(next.commissionRate, 0, 100);
       next.discountRate = clamp(next.discountRate, 0, 100);
+      next.vatRate = Math.max(0, next.vatRate);
       next.couponValue = Math.max(0, next.couponValue);
 
       if (!next.campaignEnabled) {
@@ -78,6 +84,13 @@ export function SingleAnalysis() {
   };
 
   const resetScenario = () => setValues(initialValues);
+
+  const onVatPresetSelect = (nextVatRate: number | 'custom') => {
+    setValues((prev) => ({
+      ...prev,
+      vatRate: nextVatRate === 'custom' ? (isCustomVat ? prev.vatRate : 0) : nextVatRate
+    }));
+  };
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-stretch">
@@ -140,6 +153,50 @@ export function SingleAnalysis() {
           </Field>
         </div>
 
+        <div className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+          <div className="min-w-fit">
+            <p className="text-sm text-slate-700">KDV Oranı (%)</p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {VAT_PRESETS.map((rate) => {
+              const active = values.vatRate === rate;
+              return (
+                <button
+                  key={rate}
+                  type="button"
+                  onClick={() => onVatPresetSelect(rate)}
+                  className={active ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+                >
+                  %{rate}
+                </button>
+              );
+            })}
+
+            <button
+              type="button"
+              onClick={() => onVatPresetSelect('custom')}
+              className={isCustomVat ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+            >
+              Diğer
+            </button>
+          </div>
+
+          {isCustomVat ? (
+            <label className="w-24 text-sm text-slate-700">
+              <span className="sr-only">Özel KDV oranı</span>
+              <input
+                type="number"
+                min={0}
+                step={0.1}
+                className="input"
+                value={values.vatRate}
+                onChange={(e) => onNumberChange('vatRate', e.target.value)}
+              />
+            </label>
+          ) : null}
+        </div>
+
         <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
           <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
             <input
@@ -191,6 +248,7 @@ export function SingleAnalysis() {
         <section className="card p-6 lg:flex-1">
           <p className="text-sm font-medium text-slate-500">Net Kâr</p>
           <p className="number-display mt-1 text-4xl font-semibold text-slate-900">{formatTry(result.netProfit)}</p>
+          <p className="mt-2 text-sm text-slate-600">Net Satış (KDV Hariç): {formatTry(result.netSales)}</p>
 
           <div className="mt-4 flex items-center gap-2">
             <span className={statusBadgeClass(result.status)}>{statusLabel(result.status)}</span>
@@ -202,7 +260,7 @@ export function SingleAnalysis() {
             <p className="number-display text-lg font-semibold text-slate-900">{formatTry(result.netProfit * 100)}</p>
           </div>
 
-          <p className="mt-4 text-xs text-slate-500">Hesaplar anlık güncellenir.</p>
+          <p className="mt-4 text-xs text-slate-500">Satış fiyatı KDV dahil kabul edilir. Hesaplar anlık güncellenir.</p>
         </section>
       </aside>
     </div>
@@ -221,16 +279,19 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function calculate(input: SingleInput) {
   const discountRate = input.campaignEnabled ? clamp(input.discountRate, 0, 100) : 0;
   const couponValue = input.campaignEnabled ? Math.max(0, input.couponValue) : 0;
+  const vatRate = Math.max(0, input.vatRate);
 
   const effectivePrice = Math.max(0, input.salesPrice - input.salesPrice * (discountRate / 100) - couponValue);
+  const netSales = effectivePrice / (1 + vatRate / 100);
   const commission = effectivePrice * (clamp(input.commissionRate, 0, 100) / 100);
-  const netProfit = effectivePrice - (input.costPrice + input.shippingCost + input.advertisingCost + commission);
-  const marginPct = effectivePrice > 0 ? (netProfit / effectivePrice) * 100 : 0;
+  const netProfit = netSales - (input.costPrice + input.shippingCost + input.advertisingCost + commission);
+  const marginPct = netSales > 0 ? (netProfit / netSales) * 100 : 0;
 
   const status: Status = netProfit < 0 ? 'loss' : netProfit >= input.targetProfit ? 'ok' : 'weak';
 
   return {
     effectivePrice,
+    netSales,
     commission,
     netProfit,
     marginPct,
@@ -243,7 +304,7 @@ function buildAssistant(status: Status, campaignEnabled: boolean): string[] {
     return [
       'Tanı: Senaryo hedef kârı karşılıyor.',
       'Öneri: Reklam ve kargo kalemlerini küçük adımlarla optimize ederek marjı koru.',
-      `Kontrol: ${campaignEnabled ? 'Kampanya açıkken efektif fiyatın ve komisyon tutarının beklendiği gibi düştüğünü' : 'Kampanya kapalıyken liste fiyatı üzerinden komisyon hesaplandığını'} doğrula.`
+      `Kontrol: ${campaignEnabled ? 'Kampanya açıkken efektif fiyat ve KDV hariç net satış hesabını kontrol et' : 'Satış fiyatının KDV dahil, maliyetlerin gider bazlı işlendiğini doğrula'}.`
     ];
   }
 
@@ -251,14 +312,14 @@ function buildAssistant(status: Status, campaignEnabled: boolean): string[] {
     return [
       'Tanı: Senaryo pozitif ama hedef kârın altında.',
       'Öneri: İndirim/kupon derinliğini azaltıp kargo ve reklam bütçesini yeniden dengele.',
-      `Kontrol: Komisyon oranının kategori için beklediğin oranla uyumlu olduğunu ve kampanya etkisini doğru yansıttığını teyit et.`
+      'Kontrol: Komisyon oranının kategoriyle uyumlu olduğunu, satış fiyatının KDV dahil kabul edildiğini ve net satışın KDV hariç hesaplandığını teyit et.'
     ];
   }
 
   return [
     'Tanı: Senaryo mevcut parametrelerde zararda.',
     'Öneri: Önce kampanya maliyetini hafiflet, ardından kargo ve reklam kalemlerinde daha sürdürülebilir bir seviye dene.',
-    'Kontrol: Efektif satış fiyatı ve komisyon hesabını adım adım doğrulayarak zarar kaynağını netleştir.'
+    'Kontrol: Efektif satış fiyatı, KDV hariç net satış ve komisyon hesabını adım adım doğrulayarak zarar kaynağını netleştir.'
   ];
 }
 

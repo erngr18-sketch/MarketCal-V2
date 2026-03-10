@@ -74,7 +74,7 @@ function runUiGuards() {
   const layoutTsx = readRequiredFile('app/layout.tsx');
   const globalsCss = readRequiredFile('app/globals.css');
   const tailwindConfig = readRequiredFile('tailwind.config.ts');
-  const comparePage = readRequiredFile('app/app/compare/page.tsx');
+  const comparePage = readRequiredFile('app/(panel)/compare/page.tsx');
   const sidebarTsx = readRequiredFile('app/components/sidebar.tsx');
 
   assertMatch(layoutTsx, /import\s+['"]\.\/globals\.css['"];?/, 'app/layout.tsx', "Root layout içinde './globals.css' import'u zorunlu.");
@@ -91,10 +91,10 @@ function runUiGuards() {
     "Tailwind content içinde './app/**/*' deseni eksik."
   );
 
-  assertMatch(comparePage, /export\s+default\s+function/, 'app/app/compare/page.tsx', 'Compare page default export eksik.');
+  assertMatch(comparePage, /export\s+default\s+function/, 'app/(panel)/compare/page.tsx', 'Compare page default export eksik.');
 
-  assertMatch(sidebarTsx, /href:\s*['"]\/app\/compare['"]/, 'app/components/sidebar.tsx', "Sidebar compare linki '/app/compare' olmalı.");
-  assertNoMatch(sidebarTsx, /href:\s*['"]\/compare['"]/, 'app/components/sidebar.tsx', "Sidebar içinde '/compare' linki tespit edildi.");
+  assertMatch(sidebarTsx, /href:\s*['"]\/compare['"]/, 'app/components/sidebar.tsx', "Sidebar compare linki '/compare' olmalı.");
+  assertNoMatch(sidebarTsx, /href:\s*['"]\/app\/compare['"]/, 'app/components/sidebar.tsx', "Sidebar içinde eski '/app/compare' linki tespit edildi.");
 
   console.log('[controlcheck] UI guard kontrolleri geçti.');
 }
