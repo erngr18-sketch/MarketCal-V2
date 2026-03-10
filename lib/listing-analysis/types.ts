@@ -6,6 +6,20 @@ export type ListingSourceType =
   | 'generic'
   | 'unknown';
 
+export type ListingAnalysisErrorCode =
+  | 'EMPTY_HTML'
+  | 'UNSUPPORTED_SOURCE'
+  | 'INSUFFICIENT_PRICES'
+  | 'LOW_CONFIDENCE_PARSE'
+  | 'OUTLIER_COLLAPSE'
+  | 'FETCH_TIMEOUT'
+  | 'FETCH_FORBIDDEN'
+  | 'FETCH_NOT_FOUND'
+  | 'FETCH_SERVER'
+  | 'FETCH_NETWORK'
+  | 'FETCH_EMPTY_HTML'
+  | 'UNKNOWN';
+
 export type ListingPriceStats = {
   min: number;
   q1: number;
@@ -39,6 +53,13 @@ export type ListingAnalysisSummaryInput = {
   usedFallback?: boolean;
 };
 
+export type ListingPriceParseMetadata = {
+  pricesCount: number;
+  uniquePricesCount: number;
+  rangeRatio: number;
+  parseConfidence: SummaryConfidence;
+};
+
 export type CategoryAnalysisRequestBody = {
   listingUrl: string;
   myPrice: number;
@@ -53,6 +74,8 @@ export type CategoryAnalysisSuccessResponse = {
   normalizedUrl: string;
   stats: ListingPriceStats;
   pricesCount: number;
+  uniquePricesCount?: number;
+  parseConfidence?: SummaryConfidence;
   summary: string;
 };
 
@@ -76,3 +99,13 @@ export type ListingSourceAdapter = {
   validate(rawUrl: string): ListingUrlValidationResult;
   normalize(urlOrRaw: string | URL): string;
 };
+
+export class ListingAnalysisError extends Error {
+  code: ListingAnalysisErrorCode;
+
+  constructor(code: ListingAnalysisErrorCode, message: string) {
+    super(message);
+    this.name = 'ListingAnalysisError';
+    this.code = code;
+  }
+}

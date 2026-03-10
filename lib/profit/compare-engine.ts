@@ -1,4 +1,4 @@
-import { calculateVatAwarePricing, round2 } from '@/lib/profit/pricing-engine';
+import { calculateVatAwarePricing, resolveCampaignValues, sanitizePricingInput } from '@/lib/profit/pricing-engine';
 
 export type CompareRowInput = {
   marketplaceId: string;
@@ -57,13 +57,7 @@ export type CompareEngineOutput = {
 
 export function calculateCompare(input: CompareEngineInput): CompareEngineOutput {
   const rows: CompareRowResult[] = input.rows.map((row) => {
-    const discountRate = clamp(row.discountRate, 0, 100);
-    let couponValue = Math.max(0, row.couponValue);
-
-    // XOR guard: if both are provided, ignore coupon.
-    if (discountRate > 0 && couponValue > 0) {
-      couponValue = 0;
-    }
+    const campaign = resolveCampaignValues(row.discountRate, row.couponValue);
 
     const pricing = calculateVatAwarePricing({
       salesPrice: row.salesPrice,
@@ -73,17 +67,24 @@ export function calculateCompare(input: CompareEngineInput): CompareEngineOutput
       advertisingCost: row.advertisingCost,
       targetProfit: row.targetProfit,
       vatRate: row.vatRate,
-      discountRate,
-      couponValue
+      discountRate: campaign.discountRate,
+      couponValue: campaign.couponValue
     });
-    const commissionRate = clamp(row.commissionRate / 100, 0, 0.8);
-    const status: RowStatus = pricing.netProfit < 0 ? 'loss' : pricing.netProfit >= row.targetProfit ? 'on_target' : 'borderline';
+    const sanitized = sanitizePricingInput({
+      salesPrice: row.salesPrice,
+      costPrice: row.costPrice,
+      commissionRate: row.commissionRate,
+      shippingCost: row.shippingCost,
+      advertisingCost: row.advertisingCost,
+      targetProfit: row.targetProfit,
+      vatRate: row.vatRate,
+      discountRate: campaign.discountRate,
+      couponValue: campaign.couponValue
+    });
+    const status: RowStatus =
+      pricing.netProfit < 0 ? 'loss' : pricing.netProfit >= sanitized.targetProfit ? 'on_target' : 'borderline';
 
-    const dr = discountRate / 100;
-    const fixedCosts = row.costPrice + row.shippingCost + row.advertisingCost;
-    const denominator = (1 - dr) * (1 - commissionRate);
-    const minRequiredSalesPrice =
-      denominator <= 0 ? 0 : round2(((row.targetProfit + fixedCosts + couponValue * (1 - commissionRate)) / denominator) * (1 + row.vatRate / 100));
+    const minRequiredSalesPrice = pricing.suggestedSalesPrice;
     const alreadyAboveMinPrice = row.salesPrice >= minRequiredSalesPrice;
 
     return {
@@ -160,13 +161,14 @@ function buildAssistantItem(row: CompareRowResult, input: CompareRowInput | unde
   }
 
   const status: ProfitStatus = row.marketplaceId === topMarketplaceId ? 'top' : row.status;
-  const hasDiscount = input.discountRate > 0;
-  const hasCoupon = input.couponValue > 0;
+  const campaign = resolveCampaignValues(input.discountRate, input.couponValue);
+  const hasDiscount = campaign.discountRate > 0;
+  const hasCoupon = campaign.couponValue > 0;
   const hasCampaignImpact = hasDiscount || hasCoupon;
   const hasCargo = input.shippingCost > 0;
   const hasAds = input.advertisingCost > 0;
 
-  const campaignImpact = Math.max(0, input.salesPrice * (input.discountRate / 100), input.couponValue);
+  const campaignImpact = Math.max(0, input.salesPrice * (campaign.discountRate / 100), campaign.couponValue);
   const levers: Array<{ key: 'campaign' | 'cargo' | 'ads'; impact: number; text: string }> = [];
 
   if (hasCampaignImpact) {

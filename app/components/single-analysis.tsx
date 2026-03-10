@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
-import { calculateVatAwarePricing } from '@/lib/profit/pricing-engine';
+import { calculateVatAwarePricing, resolveCampaignValues } from '@/lib/profit/pricing-engine';
 
 type SingleInput = {
   salesPrice: number;
@@ -52,7 +52,7 @@ export function SingleAnalysis() {
     setValues((prev) => {
       const next: SingleInput = { ...prev, [key]: safe };
 
-      next.commissionRate = clamp(next.commissionRate, 0, 100);
+      next.commissionRate = clamp(next.commissionRate, 0, 80);
       next.discountRate = clamp(next.discountRate, 0, 100);
       next.vatRate = Math.max(0, next.vatRate);
       next.couponValue = Math.max(0, next.couponValue);
@@ -122,7 +122,7 @@ export function SingleAnalysis() {
             <input
               type="number"
               min={0}
-              max={100}
+              max={80}
               className="input"
               value={values.commissionRate}
               onChange={(e) => onNumberChange('commissionRate', e.target.value)}
@@ -278,8 +278,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function calculate(input: SingleInput) {
-  const discountRate = input.campaignEnabled ? clamp(input.discountRate, 0, 100) : 0;
-  const couponValue = input.campaignEnabled ? Math.max(0, input.couponValue) : 0;
+  const campaign = input.campaignEnabled ? resolveCampaignValues(input.discountRate, input.couponValue) : { discountRate: 0, couponValue: 0 };
   const pricing = calculateVatAwarePricing({
     salesPrice: input.salesPrice,
     costPrice: input.costPrice,
@@ -288,11 +287,11 @@ function calculate(input: SingleInput) {
     advertisingCost: input.advertisingCost,
     targetProfit: input.targetProfit,
     vatRate: input.vatRate,
-    discountRate,
-    couponValue
+    discountRate: campaign.discountRate,
+    couponValue: campaign.couponValue
   });
 
-  const status: Status = pricing.netProfit < 0 ? 'loss' : pricing.netProfit >= input.targetProfit ? 'ok' : 'weak';
+  const status: Status = pricing.netProfit < 0 ? 'loss' : pricing.netProfit >= Math.max(0, input.targetProfit) ? 'ok' : 'weak';
 
   return {
     effectivePrice: pricing.effectivePrice,

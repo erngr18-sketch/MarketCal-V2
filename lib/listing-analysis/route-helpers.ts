@@ -9,6 +9,9 @@ type BuildListingSummaryInput = {
   netProfit?: number;
   targetGap?: number;
   suggestedPrice?: number;
+  pricesCount?: number;
+  usedRealAnalysis?: boolean;
+  usedFallback?: boolean;
 };
 
 export async function buildListingSummary(input: BuildListingSummaryInput): Promise<string> {
@@ -21,7 +24,10 @@ export async function buildListingSummary(input: BuildListingSummaryInput): Prom
     segmentLabel: positionLabelByPrice(input.myPrice, input.stats),
     netProfit: input.netProfit,
     targetGap: input.targetGap,
-    suggestedPrice: input.suggestedPrice
+    suggestedPrice: input.suggestedPrice,
+    pricesCount: input.pricesCount,
+    usedRealAnalysis: input.usedRealAnalysis,
+    usedFallback: input.usedFallback
   };
 
   return generateListingSummary(summaryInput);

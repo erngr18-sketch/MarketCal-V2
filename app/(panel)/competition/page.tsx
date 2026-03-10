@@ -336,7 +336,7 @@ export default function CompetitionPage() {
               <input
                 type="number"
                 min={0}
-                max={99.99}
+                max={80}
                 step={0.01}
                 className="input"
                 value={form.commissionRate}
@@ -660,7 +660,7 @@ function parseInputs(form: FormState) {
     myPrice,
     costPrice,
     commissionRate,
-    commissionValid: commissionRate >= 0 && commissionRate < 100,
+    commissionValid: commissionRate >= 0 && commissionRate <= 80,
     shippingCost,
     advertisingCost,
     targetProfit,
@@ -684,7 +684,6 @@ function calculateProfitMetrics(parsed: ReturnType<typeof parseInputs>) {
   });
   const distanceToTarget = parsed.targetProfit - pricing.netProfit;
   const priceSufficientForTarget = parsed.myPrice >= pricing.suggestedSalesPrice;
-
   const statusLabel = pricing.netProfit >= parsed.targetProfit ? 'Hedefte' : pricing.netProfit >= 0 ? 'Sınırda' : 'Zararda';
   const targetGapHelper = pricing.targetGap >= 0 ? 'Hedef kârı karşılıyor.' : 'Hedef kârın altında.';
   const suggestedPriceMessage = priceSufficientForTarget

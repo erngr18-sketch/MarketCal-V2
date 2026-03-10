@@ -142,13 +142,13 @@ export default function CompetitionProductPage() {
                 <input
                   type="number"
                   min={0}
-                  max={99.99}
+                max={80}
                   step={0.01}
                   className="input"
                   value={form.commissionRate}
                   onChange={(event) => setForm((prev) => ({ ...prev, commissionRate: event.target.value }))}
                 />
-                {!parsed.commissionValid ? <p className="error-text text-xs text-rose-600">Komisyon %100 üstü olamaz.</p> : null}
+                {!parsed.commissionValid ? <p className="error-text text-xs text-rose-600">Komisyon %80 üstü olamaz.</p> : null}
               </label>
             </div>
 
@@ -297,7 +297,7 @@ function parseProductInputs(form: ProductFormState) {
     targetProfit: parseNumber(form.targetProfit),
     commissionRate,
     vatRate,
-    commissionValid: commissionRate >= 0 && commissionRate < 100
+    commissionValid: commissionRate >= 0 && commissionRate <= 80
   };
 }
 
@@ -316,7 +316,8 @@ function calculateProfitSummary(parsed: ReturnType<typeof parseProductInputs>) {
     netSales: pricing.netSales,
     commission: pricing.commissionAmount,
     netProfit: pricing.netProfit,
-    targetGap: pricing.targetGap
+    targetGap: pricing.targetGap,
+    suggestedSalesPrice: pricing.suggestedSalesPrice
   };
 }
 
@@ -411,8 +412,10 @@ function buildProductAiLines({
 
   if (pricing.netProfit < targetProfit) {
     lines.push(`⚠️ Tahmini net kâr (${formatTry(pricing.netProfit)}) hedef kârın altında; maliyet ve fiyat varsayımlarını yeniden dengele.`);
-  } else {
+  } else if (pricing.targetGap === 0) {
     lines.push(`⚠️ Tahmini net kâr (${formatTry(pricing.netProfit)}) hedefe yakın; komisyon ve maliyetleri panelden teyit et.`);
+  } else {
+    lines.push(`⚠️ Tahmini net kâr (${formatTry(pricing.netProfit)}) hedef kârı karşılıyor; maliyet ve komisyonu yine de kontrol et.`);
   }
 
   if (myPrice > stats.upperQuartile) {
