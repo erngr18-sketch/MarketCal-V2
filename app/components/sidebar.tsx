@@ -19,16 +19,16 @@ type SidebarItem = {
 };
 
 const items: SidebarItem[] = [
-  { href: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/app/single', label: 'Tek Ürün Analizi', icon: BarChart3 },
-  { href: '/app/compare', label: 'Karşılaştırma', icon: Scale },
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/single', label: 'Tek Ürün Analizi', icon: BarChart3 },
+  { href: '/compare', label: 'Karşılaştırma', icon: Scale },
   {
-    href: '/app/competition',
+    href: '/competition',
     label: 'Rekabet Analizi',
     icon: TrendingUp,
     children: [
-      { href: '/app/competition', label: 'Fiyat Konumu' },
-      { href: '/app/competition/product', label: 'Ürün Bazlı' }
+      { href: '/competition', label: 'Fiyat Konumu' },
+      { href: '/competition/product', label: 'Ürün Bazlı' }
     ]
   }
 ];
