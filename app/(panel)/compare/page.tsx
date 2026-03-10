@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
@@ -209,9 +208,6 @@ export default function ComparePage() {
           <p className="mt-1 text-sm text-slate-600">Tek ürün senaryosunda pazaryerlerini komisyon, kargo ve kampanya etkileriyle kıyaslayın.</p>
           <p className="mt-1 text-xs text-slate-500">1) Ürün senaryosunu gir  2) Pazaryerlerini ekle  3) Önerileri uygula</p>
         </div>
-        <Link className="btn btn-primary" href={`/app/competition?price=${safePriceForCompetition(globals.salesPrice)}`}>
-          Rekabet Analizine Geç
-        </Link>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
@@ -601,11 +597,6 @@ function statusCardClass(rank: ProfitRank) {
 
 function labelByMarketplaceId(id: string) {
   return MARKETPLACES.find((marketplace) => marketplace.id === id)?.label ?? '-';
-}
-
-function safePriceForCompetition(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return 120;
-  return Math.max(0, Math.round(value * 100) / 100);
 }
 
 function clamp(value: number, min: number, max: number) {

@@ -21,6 +21,7 @@ type FormState = {
   shippingCost: string;
   advertisingCost: string;
   targetProfit: string;
+  vatRate: string;
   manualOpen: boolean;
   manualLow: string;
   manualMid: string;
@@ -45,16 +46,20 @@ const INITIAL_STATE: FormState = {
   shippingCost: '0',
   advertisingCost: '0',
   targetProfit: '0',
+  vatRate: '20',
   manualOpen: false,
   manualLow: '',
   manualMid: '',
   manualHigh: ''
 };
 
+const VAT_PRESETS = ['20', '10', '1'] as const;
+
 export default function CompetitionPage() {
   const [form, setForm] = useState<FormState>(INITIAL_STATE);
   const [errors, setErrors] = useState<ValidationState>({});
   const [result, setResult] = useState<CompetitionOutput | null>(null);
+  const isCustomVat = !VAT_PRESETS.includes(form.vatRate as (typeof VAT_PRESETS)[number]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -89,16 +94,16 @@ export default function CompetitionPage() {
       nextErrors.url = urlValidation.reason ?? 'Geçerli bir Trendyol linki girin.';
     }
     if (!(parsed.myPrice > 0)) {
-      nextErrors.myPrice = 'Satış fiyatı 0’dan büyük olmalıdır.';
+      nextErrors.myPrice = 'Satış fiyatı girmelisin.';
     }
     if (parsed.costPrice < 0) {
-      nextErrors.costPrice = 'Maliyet 0’dan küçük olamaz.';
+      nextErrors.costPrice = 'Maliyet değeri geçerli olmalı.';
     }
     if (!parsed.commissionValid) {
-      nextErrors.commissionRate = 'Komisyon %100 üstü olamaz.';
+      nextErrors.commissionRate = 'Komisyon oranını kontrol et.';
     }
     if (form.manualOpen && !parsed.manualValid) {
-      nextErrors.manual = 'Manuel fiyatlar: düşük < orta < yüksek olmalı.';
+      nextErrors.manual = 'Manuel fiyatlarda düşük, orta ve yüksek sırası doğru olmalı.';
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -153,6 +158,18 @@ export default function CompetitionPage() {
             ? `Hedef kâr karşılanıyor (${profit.statusLabel}).`
             : `Hedefe uzaklık: ${formatTry(distance)} (${profit.statusLabel}).`
       });
+      parsedItems.push({
+        icon: 'check',
+        tone: 'neutral',
+        text: 'Hesaplama KDV hariç net satış üzerinden yapılır.'
+      });
+      parsedItems.unshift({
+        icon: profit.priceSufficientForTarget ? 'check' : 'target',
+        tone: profit.priceSufficientForTarget ? 'success' : 'warning',
+        text: profit.priceSufficientForTarget
+          ? 'Mevcut fiyat hem pazarda makul hem de hedef kâr açısından yeterli görünüyor.'
+          : 'Bu fiyat pazarda dengeli görünse de hedef kâr için satış fiyatını artırman gerekebilir.'
+      });
     }
 
     return parsedItems.slice(0, 5);
@@ -161,8 +178,8 @@ export default function CompetitionPage() {
   return (
     <div className="space-y-6">
       <section>
-        <h1 className="text-2xl font-semibold text-slate-900">Rekabet Analizi — Fiyat Konumu</h1>
-        <p className="mt-1 text-sm text-slate-600">Trendyol sonuçlarına göre fiyat bandını ve konumunu gör.</p>
+        <h1 className="text-2xl font-semibold text-slate-900">Fiyatın Pazarda Nerede?</h1>
+        <p className="mt-1 text-sm text-slate-600">Trendyol sonuçlarına göre fiyatının pazarda hangi seviyede olduğunu gör.</p>
         <p className="mt-1 text-xs text-slate-500">Linki kontrol et → senaryonu gir → analizi başlat</p>
       </section>
 
@@ -242,6 +259,50 @@ export default function CompetitionPage() {
                 onChange={(event) => setForm((prev) => ({ ...prev, targetProfit: event.target.value }))}
               />
             </Field>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+            <div className="min-w-fit">
+              <p className="text-sm text-slate-700">KDV Oranı (%)</p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {VAT_PRESETS.map((rate) => {
+                const active = form.vatRate === rate;
+                return (
+                  <button
+                    key={rate}
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, vatRate: rate }))}
+                    className={active ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+                  >
+                    %{rate}
+                  </button>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={() => setForm((prev) => ({ ...prev, vatRate: isCustomVat ? prev.vatRate : '0' }))}
+                className={isCustomVat ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+              >
+                Diğer
+              </button>
+            </div>
+
+            {isCustomVat ? (
+              <label className="w-24 text-sm text-slate-700">
+                <span className="sr-only">Özel KDV oranı</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  className="input"
+                  value={form.vatRate}
+                  onChange={(event) => setForm((prev) => ({ ...prev, vatRate: event.target.value }))}
+                />
+              </label>
+            ) : null}
           </div>
 
           <div className="mt-5 space-y-4 border-t border-slate-200 pt-4">
@@ -341,10 +402,10 @@ export default function CompetitionPage() {
               onClick={onRunAnalysis}
               disabled={!canRun}
             >
-              Analizi Başlat
+              Fiyatımı Analiz Et
             </button>
             {!canRun ? <p className="helper-text text-xs text-slate-500">Analizi başlatmak için link + fiyat + maliyet girin.</p> : null}
-            {form.manualOpen && !parsed.manualValid ? <p className="error-text text-xs text-rose-600">Manuel fiyatlar: düşük &lt; orta &lt; yüksek olmalı.</p> : null}
+            {form.manualOpen && !parsed.manualValid ? <p className="error-text text-xs text-rose-600">Manuel fiyatlarda düşük, orta ve yüksek sırası doğru olmalı.</p> : null}
           </div>
         </section>
 
@@ -353,13 +414,13 @@ export default function CompetitionPage() {
 
           <section className="card p-5">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="card-title">Pazar Konumu</h3>
+              <h3 className="card-title">Fiyatının Pazardaki Yeri</h3>
               {result ? <CompetitionRankBadge segmentLabel={profit.statusLabel} /> : null}
             </div>
 
             {result ? (
               <>
-                <p className="mt-1 text-sm text-slate-600">Pazardaki konumun: %{result.myPercentile}</p>
+                <p className="mt-1 text-sm text-slate-600">Bu fiyat pazardaki ürünlerin yaklaşık %{result.myPercentile}'sinden daha pahalı.</p>
 
                 <div className="mt-4">
                   <div className="relative h-2 rounded-full bg-slate-100">
@@ -374,11 +435,28 @@ export default function CompetitionPage() {
                     <Pill label="Orta Bant" value={formatTry(result.stats.median)} />
                     <Pill label="Üst Bant" value={formatTry(result.stats.q3)} />
                   </div>
+                  <div className="mt-2 space-y-1 text-[11px] text-slate-500">
+                    <p>Alt bant → Daha ucuz ürünler</p>
+                    <p>Orta bant → Pazarın ortalama fiyatı</p>
+                    <p>Üst bant → Daha pahalı ürünler</p>
+                  </div>
                   <p className="mt-2 text-xs font-medium text-slate-700">Senin fiyatın: {formatTry(result.myPrice)}</p>
+                </div>
+
+                <div className="mt-4 grid gap-2">
+                  <ResultBlock label="Net Satış (KDV Hariç)" value={formatTry(profit.netSales)} />
+                  <ResultBlock label="Komisyon" value={formatTry(profit.commissionAmount)} />
+                  <ResultBlock label="Net Kâr" value={formatTry(profit.netProfit)} emphasis />
+                  <ResultBlock label="Hedef Kâr Farkı" value={profit.targetGapLabel} />
+                  <ResultBlock label="Önerilen Satış Fiyatı" value={formatTry(profit.suggestedPrice)} accent />
+                </div>
+                <div className="mt-2 space-y-1">
+                  <p className="text-xs text-slate-600">{profit.targetGapHelper}</p>
+                  <p className="text-xs text-slate-600">{profit.suggestedPriceMessage}</p>
                 </div>
               </>
             ) : (
-              <p className="mt-2 text-sm text-slate-500">Fiyat konumu analizi başlattığınızda burada gösterilir.</p>
+              <p className="mt-2 text-sm text-slate-500">Analizi başlattığında fiyatının pazardaki yeri ve kârlılık özeti burada görünür.</p>
             )}
           </section>
         </aside>
@@ -413,6 +491,30 @@ function Pill({ label, value }: { label: string; value: string }) {
   return <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-700">{label}: {value}</span>;
 }
 
+function ResultBlock({
+  label,
+  value,
+  emphasis = false,
+  accent = false
+}: {
+  label: string;
+  value: string;
+  emphasis?: boolean;
+  accent?: boolean;
+}) {
+  const className = emphasis
+    ? 'rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-sm'
+    : accent
+      ? 'rounded-xl border border-sky-200 bg-sky-50/60 px-3 py-2'
+      : 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-2';
+  return (
+    <div className={className}>
+      <p className={emphasis ? 'text-[11px] text-slate-600' : 'text-[11px] text-slate-500'}>{label}</p>
+      <p className={emphasis ? 'number-display text-base font-semibold text-slate-900' : 'number-display text-sm font-semibold text-slate-900'}>{value}</p>
+    </div>
+  );
+}
+
 function mapAssistantLineToItem(line: string): AiPanelItem {
   const trimmed = line.trim();
   if (trimmed.startsWith('✅')) return { text: trimmed.replace(/^✅\s*/, ''), icon: 'check', tone: 'success' };
@@ -428,6 +530,7 @@ function parseInputs(form: FormState) {
   const shippingCost = parseNumber(form.shippingCost);
   const advertisingCost = parseNumber(form.advertisingCost);
   const targetProfit = parseNumber(form.targetProfit);
+  const vatRate = parseNumber(form.vatRate);
 
   const manualLow = parseNumber(form.manualLow);
   const manualMid = parseNumber(form.manualMid);
@@ -442,6 +545,7 @@ function parseInputs(form: FormState) {
     shippingCost,
     advertisingCost,
     targetProfit,
+    vatRate,
     manualLow,
     manualMid,
     manualHigh,
@@ -451,16 +555,39 @@ function parseInputs(form: FormState) {
 
 function calculateProfitMetrics(parsed: ReturnType<typeof parseInputs>) {
   const effectivePrice = parsed.myPrice;
+  const vatRate = Math.max(0, parsed.vatRate) / 100;
+  const netSales = effectivePrice / (1 + vatRate);
   const commissionRate = clamp(parsed.commissionRate / 100, 0, 0.9999);
   const commissionAmount = effectivePrice * commissionRate;
-  const netProfit = effectivePrice - parsed.costPrice - commissionAmount - parsed.shippingCost - parsed.advertisingCost;
+  const netProfit = netSales - parsed.costPrice - commissionAmount - parsed.shippingCost - parsed.advertisingCost;
   const distanceToTarget = parsed.targetProfit - netProfit;
+  const targetGap = netProfit - parsed.targetProfit;
+  const denominator = 1 - commissionRate;
+  const suggestedPrice =
+    denominator <= 0
+      ? effectivePrice
+      : ((parsed.targetProfit + parsed.costPrice + parsed.shippingCost + parsed.advertisingCost) / denominator) * (1 + vatRate);
+  const safeSuggestedPrice = Number.isFinite(suggestedPrice) ? Math.max(0, suggestedPrice) : effectivePrice;
+  const priceSufficientForTarget = effectivePrice >= safeSuggestedPrice;
 
   const statusLabel = netProfit >= parsed.targetProfit ? 'Hedefte' : netProfit >= 0 ? 'Sınırda' : 'Zararda';
+  const targetGapLabel = targetGap >= 0 ? 'Hedef kârı karşılıyor.' : 'Hedef kârın altında.';
+  const targetGapHelper = targetGap >= 0 ? 'Hedef kârı karşılıyor.' : 'Hedef kârın altında.';
+  const suggestedPriceMessage = priceSufficientForTarget
+    ? 'Mevcut fiyat hedef kâr için yeterli görünüyor.'
+    : `Hedef kâra yaklaşmak için fiyatını yaklaşık ${formatTry(safeSuggestedPrice)} seviyesine çıkarman gerekebilir.`;
 
   return {
+    netSales,
+    commissionAmount,
     netProfit,
     distanceToTarget,
+    targetGap,
+    targetGapLabel,
+    targetGapHelper,
+    suggestedPrice: safeSuggestedPrice,
+    suggestedPriceMessage,
+    priceSufficientForTarget,
     statusLabel
   };
 }

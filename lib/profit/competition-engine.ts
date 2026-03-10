@@ -50,36 +50,36 @@ const NOISE_PARAM_NAMES = new Set(['gclid', 'fbclid']);
 export function validateTrendyolUrl(rawUrl: string): UrlValidationResult {
   const trimmed = rawUrl.trim();
   if (!trimmed) {
-    return { ok: false };
+    return { ok: false, reason: 'Bu alan için Trendyol linki gerekiyor.' };
   }
 
   let parsed: URL;
   try {
     parsed = new URL(trimmed);
   } catch {
-    return { ok: false, reason: 'Geçersiz URL' };
+    return { ok: false, reason: 'Link okunamadı. Trendyol kategori veya arama sonucu linki gir.' };
   }
 
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    return { ok: false, reason: 'URL yalnızca http/https olabilir.' };
+    return { ok: false, reason: 'Link okunamadı. Trendyol kategori veya arama sonucu linki gir.' };
   }
 
   if (!ALLOWED_HOSTS.has(parsed.hostname.toLowerCase())) {
-    return { ok: false, reason: 'Sadece trendyol.com veya www.trendyol.com kabul edilir.' };
+    return { ok: false, reason: 'Bu alan için Trendyol linki gerekiyor.' };
   }
 
   const pathname = parsed.pathname.toLowerCase();
   const full = parsed.toString().toLowerCase();
 
   if (pathname.includes('-p-') || full.includes('-p-')) {
-    return { ok: false, reason: 'Ürün linki değil, kategori/arama linki girin.' };
+    return { ok: false, reason: 'Ürün sayfası değil, kategori ya da arama sonucu linki gir.' };
   }
 
   const isSearchPath = pathname === '/sr' || pathname === '/sr/';
   const isCategoryPath = pathname.startsWith('/butik/liste') || pathname.startsWith('/kategori');
 
   if (!isSearchPath && !isCategoryPath) {
-    return { ok: false, reason: 'Geçersiz Trendyol kategori/arama linki.' };
+    return { ok: false, reason: 'Link okunamadı. Trendyol kategori veya arama sonucu linki gir.' };
   }
 
   if (isSearchPath) {
@@ -87,7 +87,7 @@ export function validateTrendyolUrl(rawUrl: string): UrlValidationResult {
       const value = parsed.searchParams.get(key);
       return typeof value === 'string' && value.trim().length > 0;
     });
-    if (!hasSearchQuery) return { ok: false, reason: 'Geçersiz arama linki (q/qt/st yok).' };
+    if (!hasSearchQuery) return { ok: false, reason: 'Arama sonucu linki eksik veya hatalı görünüyor.' };
   }
 
   return {
@@ -112,7 +112,7 @@ export function runCompetition(input: CompetitionInput): CompetitionOutput {
   const validation = validateTrendyolUrl(input.url ?? '');
 
   if (!validation.ok) {
-    throw new Error(validation.reason ?? 'Geçersiz Trendyol URL');
+    throw new Error(validation.reason ?? 'Link okunamadı. Trendyol kategori veya arama sonucu linki gir.');
   }
 
   const stats =
@@ -199,24 +199,25 @@ function buildSimulatedStats(normalizedUrl: string, mode: CompetitionMode): Comp
 function buildAssistantMessage(segment: ProfitStatus, stats: CompetitionStats, myPrice: number): string {
   const lines: string[] = [];
 
-  lines.push(`🧭 Fiyatın pazara göre: ${segmentLabel(segment)}.`);
+  lines.push(`🧭 Fiyatının pazardaki yeri: ${segmentLabel(segment)}.`);
 
   if (segment === 'top') {
-    lines.push('✅ Fiyatın alt bantta; görünürlük ve dönüşüm için avantajlı olabilir.');
+    lines.push('✅ Fiyatın pazardaki çoğu üründen daha düşük görünüyor. Bu satış ihtimalini artırabilir, ama marjı kontrol et.');
   } else if (segment === 'on_target') {
-    lines.push('✅ Bu seviyede dönüşüm ve marj dengesi genelde daha stabil kalır.');
+    lines.push('✅ Fiyatın pazar ortalığına yakın. Bu genelde en dengeli bölgedir.');
   } else if (segment === 'borderline') {
-    lines.push('✅ Fiyatın üst banda yakın; ürün değerini net anlatmak dönüşümü korur.');
+    lines.push('✅ Fiyatın pazardaki birçok üründen daha yüksek. Ürün değerini iyi anlatman gerekebilir.');
   } else {
-    lines.push('✅ Fiyatın üst bantta; marjı korurken talep etkisini küçük testlerle ölç.');
+    lines.push('✅ Fiyatın pazardaki birçok üründen daha yüksek. Ürün değerini iyi anlatman gerekebilir.');
   }
 
   if (myPrice < stats.q1) {
-    lines.push('⚠️ Pazar alt bandının altındasın; marj tarafını yakından takip et.');
+    lines.push('⚠️ Alt banttasın; fiyat avantajın var ama kârlılığı yakından izle.');
   } else if (myPrice > stats.q3) {
-    lines.push('⚠️ Pazar üst bandının üzerindesin; tıklama ve dönüşümde düşüş riski olabilir.');
+    lines.push('⚠️ Üst banttasın; müşteriye neden daha pahalı olduğunu net göstermen gerekebilir.');
   }
 
+  lines.push('⚠️ Hesaplama KDV hariç net satış üzerinden yapılır.');
   lines.push('⚠️ Bu bir tahmindir; Trendyol sonuçları kişiye göre değişebilir.');
 
   return lines.join('\n');
