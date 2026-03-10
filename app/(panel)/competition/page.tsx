@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
+import { generateListingSummary } from '@/lib/listing-analysis/summary';
 import { formatTry, runCompetition, type CompetitionMode, type CompetitionOutput } from '@/lib/profit/competition-engine';
 import { validateListingUrl } from '@/lib/listing-analysis/validate-url';
 import { calculateVatAwarePricing } from '@/lib/profit/pricing-engine';
@@ -55,6 +56,7 @@ export default function CompetitionPage() {
   const [form, setForm] = useState<FormState>(INITIAL_STATE);
   const [errors, setErrors] = useState<ValidationState>({});
   const [result, setResult] = useState<CompetitionOutput | null>(null);
+  const [listingSummary, setListingSummary] = useState('');
   const isCustomVat = !VAT_PRESETS.includes(form.vatRate as (typeof VAT_PRESETS)[number]);
 
   useEffect(() => {
@@ -73,6 +75,35 @@ export default function CompetitionPage() {
   const parsed = useMemo(() => parseInputs(form), [form]);
   const profit = useMemo(() => calculateProfitMetrics(parsed), [parsed]);
   const urlValidation = useMemo(() => validateListingUrl(form.listingUrl), [form.listingUrl]);
+
+  useEffect(() => {
+    if (!result) {
+      setListingSummary('');
+      return;
+    }
+
+    let cancelled = false;
+
+    void generateListingSummary({
+      sourceType: result.sourceType,
+      normalizedUrl: result.normalizedUrl,
+      stats: result.stats,
+      myPrice: result.myPrice,
+      bandLabel: result.bandLabel,
+      segmentLabel: result.segmentLabel,
+      netProfit: profit.netProfit,
+      targetGap: profit.targetGap,
+      suggestedPrice: profit.suggestedPrice
+    }).then((summary) => {
+      if (!cancelled) {
+        setListingSummary(summary);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profit.netProfit, profit.suggestedPrice, profit.targetGap, result]);
 
   const canRun = useMemo(() => {
     if (!urlValidation.ok) return false;
@@ -135,6 +166,15 @@ export default function CompetitionPage() {
     const baseLines = (result?.assistantMessage ?? '⏱️ Analiz için girdileri tamamlayın.').split('\n');
     const parsedItems = baseLines.map(mapAssistantLineToItem);
 
+    if (listingSummary) {
+      parsedItems.unshift({
+        icon: 'spark',
+        tone: 'neutral',
+        text: listingSummary,
+        emphasis: true
+      });
+    }
+
     const profitability = profit.netProfit;
     const distance = profit.distanceToTarget;
     if (parsed.myPrice > 0 && parsed.costPrice > 0) {
@@ -169,7 +209,7 @@ export default function CompetitionPage() {
     }
 
     return parsedItems.slice(0, 5);
-  }, [parsed, profit, result?.assistantMessage]);
+  }, [listingSummary, parsed, profit, result?.assistantMessage]);
 
   return (
     <div className="space-y-6">

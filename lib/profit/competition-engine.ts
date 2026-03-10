@@ -1,16 +1,11 @@
 import type { ProfitStatus } from '@/lib/profit/compare-engine';
+import type { ListingPriceStats, ListingSourceType } from '@/lib/listing-analysis/types';
 import { validateListingUrl } from '@/lib/listing-analysis/validate-url';
 
 export type CompetitionMode = 'best_sellers' | 'most_reviewed';
 export type CompetitionDataSource = 'simulation' | 'manual';
 
-export type CompetitionStats = {
-  min: number;
-  q1: number;
-  median: number;
-  q3: number;
-  max: number;
-};
+export type CompetitionStats = ListingPriceStats;
 
 export type CompetitionManualPrices = {
   rival1?: number;
@@ -29,6 +24,7 @@ export type CompetitionInput = {
 export type CompetitionOutput = {
   mode: CompetitionMode;
   source: CompetitionDataSource;
+  sourceType: ListingSourceType;
   myPrice: number;
   stats: CompetitionStats;
   myPercentile: number;
@@ -59,6 +55,7 @@ export function runCompetition(input: CompetitionInput): CompetitionOutput {
   return {
     mode: input.mode,
     source: input.source,
+    sourceType: validation.sourceType,
     myPrice: safeMyPrice,
     stats,
     myPercentile,
