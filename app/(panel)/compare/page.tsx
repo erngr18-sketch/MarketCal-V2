@@ -22,6 +22,7 @@ type GlobalValues = {
   costPrice: number;
   targetProfit: number;
   defaultAdvertisingCost: number;
+  vatRate: number;
 };
 
 type CompareCardState = {
@@ -39,8 +40,11 @@ const INITIAL_GLOBALS: GlobalValues = {
   salesPrice: 120,
   costPrice: 60,
   targetProfit: 15,
-  defaultAdvertisingCost: 10
+  defaultAdvertisingCost: 10,
+  vatRate: 20
 };
+
+const VAT_PRESETS = [20, 10, 1] as const;
 
 const INITIAL_ROWS: CompareCardState[] = ['trendyol', 'hepsiburada'].map((id) => {
   const marketplace = MARKETPLACES.find((item) => item.id === id)!;
@@ -59,6 +63,7 @@ const INITIAL_ROWS: CompareCardState[] = ['trendyol', 'hepsiburada'].map((id) =>
 export default function ComparePage() {
   const [globals, setGlobals] = useState<GlobalValues>(INITIAL_GLOBALS);
   const [rows, setRows] = useState<CompareCardState[]>(INITIAL_ROWS);
+  const isCustomVat = !VAT_PRESETS.includes(globals.vatRate as (typeof VAT_PRESETS)[number]);
 
   const usedMarketplaces = new Set(rows.map((row) => row.marketplaceId));
   const addableMarketplaces = MARKETPLACES.filter((marketplace) => !usedMarketplaces.has(marketplace.id));
@@ -73,6 +78,7 @@ export default function ComparePage() {
           salesPrice: globals.salesPrice,
           costPrice: globals.costPrice,
           targetProfit: globals.targetProfit,
+          vatRate: globals.vatRate,
           commissionRate: clamp(row.commissionRate, 0, 80),
           shippingCost: row.shippingCost,
           advertisingCost: hasOverride ? Math.max(0, parsedOverride) : globals.defaultAdvertisingCost,
@@ -112,6 +118,13 @@ export default function ComparePage() {
     setGlobals((prev) => ({
       ...prev,
       [key]: Number.isFinite(next) ? Math.max(0, next) : 0
+    }));
+  };
+
+  const onVatPresetSelect = (nextVatRate: number | 'custom') => {
+    setGlobals((prev) => ({
+      ...prev,
+      vatRate: nextVatRate === 'custom' ? (isCustomVat ? prev.vatRate : 0) : nextVatRate
     }));
   };
 
@@ -225,6 +238,50 @@ export default function ComparePage() {
               <Field label="Hedef Kâr (₺)">
                 <input type="number" className="input" value={globals.targetProfit} onChange={(e) => onGlobalChange('targetProfit', e.target.value)} />
               </Field>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+              <div className="min-w-fit">
+                <p className="text-sm text-slate-700">KDV Oranı (%)</p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {VAT_PRESETS.map((rate) => {
+                  const active = globals.vatRate === rate;
+                  return (
+                    <button
+                      key={rate}
+                      type="button"
+                      onClick={() => onVatPresetSelect(rate)}
+                      className={active ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+                    >
+                      %{rate}
+                    </button>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={() => onVatPresetSelect('custom')}
+                  className={isCustomVat ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+                >
+                  Diğer
+                </button>
+              </div>
+
+              {isCustomVat ? (
+                <label className="w-24 text-sm text-slate-700">
+                  <span className="sr-only">Özel KDV oranı</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    className="input"
+                    value={globals.vatRate}
+                    onChange={(e) => onGlobalChange('vatRate', e.target.value)}
+                  />
+                </label>
+              ) : null}
             </div>
           </section>
 
@@ -344,6 +401,7 @@ export default function ComparePage() {
 
                     <div className="grid gap-2 md:grid-cols-2">
                       <ResultItem label="Efektif Fiyat" value={formatCurrency(rowResult.effectivePrice)} />
+                      <ResultItem label="Net Satış (KDV Hariç)" value={formatCurrency(rowResult.netSales)} />
                       <ResultItem label="Komisyon Tutarı" value={formatCurrency(rowResult.commissionAmount)} />
                       <ResultItem label="Net Kâr" value={formatCurrency(rowResult.netProfit)} />
                       <ResultItem label="Önerilen Satış" value={formatCurrency(rowResult.suggestedSalesPrice)} />
@@ -437,7 +495,7 @@ function buildAssistantItems({
   const items: AiPanelItem[] = [
     { icon: 'trendUp', tone: 'success', emphasis: true, text: `${top.label} şu anda en yüksek net kârı üretiyor.` },
     ...actions,
-    { icon: 'check', tone: 'neutral', text: 'Komisyon oranını panelden teyit et.' }
+    { icon: 'check', tone: 'neutral', text: 'Satış fiyatının KDV dahil, kâr hesaplarının KDV hariç net satış üzerinden yapıldığını ve komisyon oranını panelden teyit et.' }
   ];
   return items.slice(0, 5);
 }

@@ -6,6 +6,7 @@ export type CompareRowInput = {
   shippingCost: number;
   advertisingCost: number;
   targetProfit: number;
+  vatRate: number;
   discountRate: number;
   couponValue: number;
 };
@@ -20,6 +21,7 @@ export type RowStatus = Exclude<ProfitStatus, 'top'>;
 export type CompareRowResult = {
   marketplaceId: string;
   effectivePrice: number;
+  netSales: number;
   commissionAmount: number;
   netProfit: number;
   status: RowStatus;
@@ -62,21 +64,25 @@ export function calculateCompare(input: CompareEngineInput): CompareEngineOutput
     }
 
     const effectivePrice = Math.max(0, row.salesPrice - row.salesPrice * (discountRate / 100) - couponValue);
+    const vatRate = Math.max(0, row.vatRate) / 100;
+    const netSales = effectivePrice / (1 + vatRate);
     const commissionRate = clamp(row.commissionRate / 100, 0, 0.8);
     const commissionAmount = effectivePrice * commissionRate;
 
-    const netProfit = effectivePrice - (row.costPrice + row.shippingCost + row.advertisingCost + commissionAmount);
+    const netProfit = netSales - (row.costPrice + row.shippingCost + row.advertisingCost + commissionAmount);
     const status: RowStatus = netProfit < 0 ? 'loss' : netProfit >= row.targetProfit ? 'on_target' : 'borderline';
 
     const dr = discountRate / 100;
     const fixedCosts = row.costPrice + row.shippingCost + row.advertisingCost;
     const denominator = (1 - dr) * (1 - commissionRate);
-    const minRequiredSalesPrice = denominator <= 0 ? 0 : round2((row.targetProfit + fixedCosts + couponValue * (1 - commissionRate)) / denominator);
+    const minRequiredSalesPrice =
+      denominator <= 0 ? 0 : round2(((row.targetProfit + fixedCosts + couponValue * (1 - commissionRate)) / denominator) * (1 + vatRate));
     const alreadyAboveMinPrice = row.salesPrice >= minRequiredSalesPrice;
 
     return {
       marketplaceId: row.marketplaceId,
       effectivePrice,
+      netSales,
       commissionAmount,
       netProfit,
       status,
@@ -114,7 +120,7 @@ export function calculateCompare(input: CompareEngineInput): CompareEngineOutput
   const assistantMessage = [
     `Özet: ${topCount} En Karlı, ${onTargetCount} Hedefte, ${borderlineCount} Sınırda, ${lossCount} Zararda.`,
     ...assistantItems.map((item) => `${formatMarketplaceId(item.marketplaceId)} - ${item.text}`),
-    'Kontrol: Komisyon oranı kategoriye göre değişebilir; panelden teyit edin.'
+    'Kontrol: Satış fiyatının KDV dahil, kâr hesaplarının KDV hariç net satış üzerinden yapıldığını ve komisyon oranını panelden teyit edin.'
   ]
     .map((line) => `• ${line}`)
     .join('\n');
