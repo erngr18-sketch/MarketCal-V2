@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
-import { generateListingSummary } from '@/lib/listing-analysis/summary';
+import type { CategoryAnalysisResponse, ListingPriceStats } from '@/lib/listing-analysis/types';
 import { formatTry, runCompetition, type CompetitionMode, type CompetitionOutput } from '@/lib/profit/competition-engine';
 import { validateListingUrl } from '@/lib/listing-analysis/validate-url';
 import { calculateVatAwarePricing } from '@/lib/profit/pricing-engine';
@@ -34,6 +34,12 @@ type ValidationState = {
   submit?: string;
 };
 
+type ListingAnalysisState = {
+  stats: ListingPriceStats;
+  summary: string;
+  pricesCount: number;
+};
+
 const INITIAL_STATE: FormState = {
   listingUrl: EXAMPLE_TRENDYOL_SR_URL,
   mode: 'best_sellers',
@@ -56,7 +62,8 @@ export default function CompetitionPage() {
   const [form, setForm] = useState<FormState>(INITIAL_STATE);
   const [errors, setErrors] = useState<ValidationState>({});
   const [result, setResult] = useState<CompetitionOutput | null>(null);
-  const [listingSummary, setListingSummary] = useState('');
+  const [analysis, setAnalysis] = useState<ListingAnalysisState | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const isCustomVat = !VAT_PRESETS.includes(form.vatRate as (typeof VAT_PRESETS)[number]);
 
   useEffect(() => {
@@ -75,35 +82,12 @@ export default function CompetitionPage() {
   const parsed = useMemo(() => parseInputs(form), [form]);
   const profit = useMemo(() => calculateProfitMetrics(parsed), [parsed]);
   const urlValidation = useMemo(() => validateListingUrl(form.listingUrl), [form.listingUrl]);
-
-  useEffect(() => {
-    if (!result) {
-      setListingSummary('');
-      return;
-    }
-
-    let cancelled = false;
-
-    void generateListingSummary({
-      sourceType: result.sourceType,
-      normalizedUrl: result.normalizedUrl,
-      stats: result.stats,
-      myPrice: result.myPrice,
-      bandLabel: result.bandLabel,
-      segmentLabel: result.segmentLabel,
-      netProfit: profit.netProfit,
-      targetGap: profit.targetGap,
-      suggestedPrice: profit.suggestedPrice
-    }).then((summary) => {
-      if (!cancelled) {
-        setListingSummary(summary);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [profit.netProfit, profit.suggestedPrice, profit.targetGap, result]);
+  const isManualMode = form.manualOpen && parsed.manualValid;
+  const displayStats = isManualMode ? result?.stats ?? null : analysis?.stats ?? result?.stats ?? null;
+  const displaySummary = isManualMode ? '' : analysis?.summary ?? '';
+  const displaySourceLabel = isManualMode ? 'Manual Veri' : analysis ? 'Gerçek Listing Analizi' : result ? 'Simülasyon' : '';
+  const displayPercentile = displayStats ? Math.round(positionPercent(parsed.myPrice, displayStats.min, displayStats.max)) : null;
+  const displayBandLabel = displayStats ? positionLabelByPrice(parsed.myPrice, displayStats) : null;
 
   const canRun = useMemo(() => {
     if (!urlValidation.ok) return false;
@@ -114,7 +98,7 @@ export default function CompetitionPage() {
     return true;
   }, [form.manualOpen, parsed.commissionValid, parsed.costPrice, parsed.manualValid, parsed.myPrice, urlValidation.ok]);
 
-  const onRunAnalysis = () => {
+  const onRunAnalysis = async () => {
     const nextErrors: ValidationState = {};
 
     if (!form.listingUrl.trim() || !urlValidation.ok) {
@@ -140,8 +124,7 @@ export default function CompetitionPage() {
 
     try {
       const useManual = form.manualOpen && parsed.manualValid;
-
-      const output = runCompetition({
+      const fallbackOutput = runCompetition({
         listingUrl: form.listingUrl,
         mode: form.mode,
         source: useManual ? 'manual' : 'simulation',
@@ -155,22 +138,59 @@ export default function CompetitionPage() {
           : undefined
       });
 
-      setResult(output);
+      setResult(fallbackOutput);
       setErrors({});
+
+      if (useManual) {
+        setAnalysis(null);
+        return;
+      }
+
+      setIsAnalyzing(true);
+
+      try {
+        const response = await analyzeListing({
+          listingUrl: form.listingUrl,
+          myPrice: parsed.myPrice,
+          netProfit: profit.netProfit,
+          targetGap: profit.targetGap,
+          suggestedPrice: profit.suggestedPrice
+        });
+
+        setAnalysis({
+          stats: response.stats,
+          summary: response.summary,
+          pricesCount: response.pricesCount
+        });
+      } catch {
+        setAnalysis(null);
+      } finally {
+        setIsAnalyzing(false);
+      }
     } catch (error) {
+      setAnalysis(null);
+      setIsAnalyzing(false);
       setErrors({ submit: error instanceof Error ? error.message : 'Analiz sırasında hata oluştu.' });
     }
   };
 
   const aiItems = useMemo(() => {
-    const baseLines = (result?.assistantMessage ?? '⏱️ Analiz için girdileri tamamlayın.').split('\n');
-    const parsedItems = baseLines.map(mapAssistantLineToItem);
+    const items: AiPanelItem[] = [];
 
-    if (listingSummary) {
-      parsedItems.unshift({
+    if (isAnalyzing) {
+      items.push({
         icon: 'spark',
         tone: 'neutral',
-        text: listingSummary,
+        text: 'Listing analiz ediliyor...',
+        emphasis: true
+      });
+    }
+
+    if (displaySummary) {
+      items.push({
+        icon: 'spark',
+        tone: 'neutral',
+        text: displaySummary,
         emphasis: true
       });
     }
@@ -178,15 +198,14 @@ export default function CompetitionPage() {
     const profitability = profit.netProfit;
     const distance = profit.distanceToTarget;
     if (parsed.myPrice > 0 && parsed.costPrice > 0) {
-      parsedItems.unshift({
-        icon: profitability >= 0 ? 'check' : 'alert',
-        tone: profitability >= 0 ? 'success' : 'danger',
-        text:
-          profitability >= 0
-            ? `Maliyet ve gider varsayımıyla tahmini kâr: ${formatTry(profitability)}.`
-            : `Maliyet ve gider varsayımıyla tahmini sonuç: ${formatTry(profitability)} (zarar riski).`
+      items.push({
+        icon: profit.priceSufficientForTarget ? 'check' : 'target',
+        tone: profit.priceSufficientForTarget ? 'success' : 'warning',
+        text: profit.priceSufficientForTarget
+          ? 'Mevcut fiyat hem pazarda makul hem de hedef kâr açısından yeterli görünüyor.'
+          : 'Bu fiyat pazarda dengeli görünse de hedef kâr için satış fiyatını artırman gerekebilir.'
       });
-      parsedItems.unshift({
+      items.push({
         icon: distance <= 0 ? 'target' : 'alert',
         tone: distance <= 0 ? 'success' : 'warning',
         text:
@@ -194,22 +213,40 @@ export default function CompetitionPage() {
             ? `Hedef kâr karşılanıyor (${profit.statusLabel}).`
             : `Hedefe uzaklık: ${formatTry(distance)} (${profit.statusLabel}).`
       });
-      parsedItems.push({
+      items.push({
+        icon: profitability >= 0 ? 'check' : 'alert',
+        tone: profitability >= 0 ? 'success' : 'danger',
+        text:
+          profitability >= 0
+            ? `Maliyet ve gider varsayımıyla tahmini kâr: ${formatTry(profitability)}.`
+            : `Maliyet ve gider varsayımıyla tahmini sonuç: ${formatTry(profitability)} (zarar riski).`
+      });
+      items.push({
         icon: 'check',
         tone: 'neutral',
         text: 'Hesaplama KDV hariç net satış üzerinden yapılır.'
       });
-      parsedItems.unshift({
-        icon: profit.priceSufficientForTarget ? 'check' : 'target',
-        tone: profit.priceSufficientForTarget ? 'success' : 'warning',
-        text: profit.priceSufficientForTarget
-          ? 'Mevcut fiyat hem pazarda makul hem de hedef kâr açısından yeterli görünüyor.'
-          : 'Bu fiyat pazarda dengeli görünse de hedef kâr için satış fiyatını artırman gerekebilir.'
-      });
     }
 
-    return parsedItems.slice(0, 5);
-  }, [listingSummary, parsed, profit, result?.assistantMessage]);
+    if (!analysis && result?.assistantMessage) {
+      items.push(...result.assistantMessage.split('\n').map(mapAssistantLineToItem));
+    }
+
+    const uniqueItems: AiPanelItem[] = [];
+    const seen = new Set<string>();
+    for (const item of items) {
+      const normalizedText = item.text.trim().toLocaleLowerCase('tr');
+      if (seen.has(normalizedText)) continue;
+      seen.add(normalizedText);
+      uniqueItems.push(item);
+    }
+
+    if (uniqueItems.length === 0) {
+      return [{ icon: 'info' as const, tone: 'neutral' as const, text: '⏱️ Analiz için girdileri tamamlayın.' }];
+    }
+
+    return uniqueItems.slice(0, 5);
+  }, [analysis, displaySummary, isAnalyzing, parsed, profit, result?.assistantMessage]);
 
   return (
     <div className="space-y-6">
@@ -436,11 +473,12 @@ export default function CompetitionPage() {
               type="button"
               className="btn btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50"
               onClick={onRunAnalysis}
-              disabled={!canRun}
+              disabled={!canRun || isAnalyzing}
             >
-              Fiyatımı Analiz Et
+              {isAnalyzing ? 'Listing analiz ediliyor...' : 'Fiyatımı Analiz Et'}
             </button>
             {!canRun ? <p className="helper-text text-xs text-slate-500">Analizi başlatmak için link + fiyat + maliyet girin.</p> : null}
+            {isAnalyzing ? <p className="helper-text text-xs text-slate-500">Gerçek listing fiyatları kontrol ediliyor.</p> : null}
             {form.manualOpen && !parsed.manualValid ? <p className="error-text text-xs text-rose-600">Manuel fiyatlarda düşük, orta ve yüksek sırası doğru olmalı.</p> : null}
           </div>
         </section>
@@ -451,32 +489,34 @@ export default function CompetitionPage() {
           <section className="card p-5">
             <div className="flex items-center justify-between gap-2">
               <h3 className="card-title">Fiyatının Pazardaki Yeri</h3>
-              {result ? <CompetitionRankBadge segmentLabel={result.segmentLabel} /> : null}
+              {displayBandLabel ? <CompetitionRankBadge segmentLabel={displayBandLabel} /> : null}
             </div>
 
-            {result ? (
+            {displayStats ? (
               <>
-                <p className="mt-1 text-sm text-slate-600">{describeMarketPosition(result.myPercentile)}</p>
+                <p className="mt-1 text-sm text-slate-600">{describeMarketPosition(displayPercentile ?? 50)}</p>
+                {displaySourceLabel ? <p className="mt-1 text-xs text-slate-500">Veri kaynağı: {displaySourceLabel}</p> : null}
+                {analysis ? <p className="mt-1 text-xs text-slate-500">{analysis.pricesCount} fiyat üzerinden gerçek listing analizi gösteriliyor.</p> : null}
 
                 <div className="mt-4">
                   <div className="relative h-2 rounded-full bg-slate-100">
                     <div
                       className="absolute -top-1.5 h-5 w-1 -translate-x-1/2 rounded bg-slate-900"
-                      style={{ left: `${positionPercent(result.myPrice, result.stats.min, result.stats.max)}%` }}
+                      style={{ left: `${positionPercent(parsed.myPrice, displayStats.min, displayStats.max)}%` }}
                     />
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-                    <Pill label="Alt Bant" value={formatTry(result.stats.q1)} />
-                    <Pill label="Orta Seviye" value={formatTry(result.stats.median)} />
-                    <Pill label="Üst Bant" value={formatTry(result.stats.q3)} />
+                    <Pill label="Alt Bant" value={formatTry(displayStats.q1)} />
+                    <Pill label="Orta Seviye" value={formatTry(displayStats.median)} />
+                    <Pill label="Üst Bant" value={formatTry(displayStats.q3)} />
                   </div>
                   <div className="mt-2 space-y-1 text-[11px] text-slate-500">
                     <p>Alt bant → Daha ucuz ürünler</p>
                     <p>Orta bant → Pazarın ortalama fiyatı</p>
                     <p>Üst bant → Daha pahalı ürünler</p>
                   </div>
-                  <p className="mt-2 text-xs font-medium text-slate-700">Senin fiyatın: {formatTry(result.myPrice)}</p>
+                  <p className="mt-2 text-xs font-medium text-slate-700">Senin fiyatın: {formatTry(parsed.myPrice)}</p>
                 </div>
 
                 <div className="mt-4 grid gap-2">
@@ -502,16 +542,13 @@ export default function CompetitionPage() {
 }
 
 function CompetitionRankBadge({ segmentLabel }: { segmentLabel: string }) {
-  if (segmentLabel === 'En Karlı') {
-    return <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">🥇 En Karlı</span>;
+  if (segmentLabel === 'Alt Bant') {
+    return <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">🟢 Alt Bant</span>;
   }
-  if (segmentLabel === 'Hedefte') {
-    return <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">🟢 Hedefte</span>;
+  if (segmentLabel === 'Orta Seviye') {
+    return <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">🟡 Orta Seviye</span>;
   }
-  if (segmentLabel === 'Sınırda') {
-    return <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">🟠 Sınırda</span>;
-  }
-  return <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">🔴 Zararda</span>;
+  return <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">🟠 Üst Bant</span>;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -644,4 +681,44 @@ function parseNumber(value: string): number {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function positionLabelByPrice(price: number, stats: ListingPriceStats): string {
+  const position = displayPosition(price, stats.min, stats.max);
+  if (position <= 0.25) return 'Alt Bant';
+  if (position <= 0.75) return 'Orta Seviye';
+  return 'Üst Bant';
+}
+
+function displayPosition(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value) || !Number.isFinite(min) || !Number.isFinite(max) || max <= min) return 0.5;
+  return clamp((value - min) / (max - min), 0, 1);
+}
+
+async function analyzeListing(input: {
+  listingUrl: string;
+  myPrice: number;
+  netProfit: number;
+  targetGap: number;
+  suggestedPrice: number;
+}): Promise<{ stats: ListingPriceStats; summary: string; pricesCount: number }> {
+  const response = await fetch('/api/category-analysis', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(input)
+  });
+
+  const data = (await response.json()) as CategoryAnalysisResponse;
+
+  if (!response.ok || !data.ok) {
+    throw new Error(data.ok ? 'Listing analizi alınamadı.' : data.message);
+  }
+
+  return {
+    stats: data.stats,
+    summary: data.summary,
+    pricesCount: data.pricesCount
+  };
 }
