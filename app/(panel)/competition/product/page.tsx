@@ -11,6 +11,7 @@ type ProductFormState = {
   costPrice: string;
   targetProfit: string;
   commissionRate: string;
+  vatRate: string;
   productUrl: string;
 };
 
@@ -32,15 +33,20 @@ const INITIAL_STATE: ProductFormState = {
   costPrice: '',
   targetProfit: '15',
   commissionRate: '20',
+  vatRate: '20',
   productUrl: ''
 };
+
+const VAT_PRESETS = ['20', '10', '1'] as const;
 
 export default function CompetitionProductPage() {
   const [form, setForm] = useState<ProductFormState>(INITIAL_STATE);
   const [analysis, setAnalysis] = useState<ProductAnalysisResult | null>(null);
+  const isCustomVat = !VAT_PRESETS.includes(form.vatRate as (typeof VAT_PRESETS)[number]);
 
   const linkValidation = useMemo(() => validateTrendyolProductUrl(form.productUrl), [form.productUrl]);
   const parsed = useMemo(() => parseProductInputs(form), [form]);
+  const summary = useMemo(() => calculateProfitSummary(parsed), [parsed]);
 
   const canAnalyze =
     form.productUrl.trim().length > 0 &&
@@ -63,6 +69,7 @@ export default function CompetitionProductPage() {
       targetProfit: parsed.targetProfit,
       costPrice: parsed.costPrice,
       commissionRate: parsed.commissionRate,
+      vatRate: parsed.vatRate,
       stats,
       bandLabel
     });
@@ -143,6 +150,50 @@ export default function CompetitionProductPage() {
                 {!parsed.commissionValid ? <p className="error-text text-xs text-rose-600">Komisyon %100 üstü olamaz.</p> : null}
               </label>
             </div>
+
+            <div className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+              <div className="min-w-fit">
+                <p className="text-sm text-slate-700">KDV Oranı (%)</p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {VAT_PRESETS.map((rate) => {
+                  const active = form.vatRate === rate;
+                  return (
+                    <button
+                      key={rate}
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, vatRate: rate }))}
+                      className={active ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+                    >
+                      %{rate}
+                    </button>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, vatRate: isCustomVat ? prev.vatRate : '20' }))}
+                  className={isCustomVat ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+                >
+                  Diğer
+                </button>
+              </div>
+
+              {isCustomVat ? (
+                <label className="w-24 text-sm text-slate-700">
+                  <span className="sr-only">Özel KDV oranı</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    className="input"
+                    value={form.vatRate}
+                    onChange={(event) => setForm((prev) => ({ ...prev, vatRate: event.target.value }))}
+                  />
+                </label>
+              ) : null}
+            </div>
           </section>
 
           <section className="card p-6">
@@ -180,7 +231,7 @@ export default function CompetitionProductPage() {
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-          <AiPanel items={(analysis?.aiLines ?? ['⏱️ Analiz için girdileri tamamlayın.']).map(mapAiLineToItem)} />
+          <AiPanel items={(analysis?.aiLines ?? ['⏱️ Analiz için girdileri tamamlayın.', '⚠️ Hesaplama KDV hariç net satış üzerinden yapılır.']).map(mapAiLineToItem)} />
 
           <section className="card p-5">
             <h3 className="card-title">Pazar Konumu</h3>
@@ -200,9 +251,16 @@ export default function CompetitionProductPage() {
                     <span>{formatTry(analysis.max)}</span>
                   </div>
                 </div>
+
+                <div className="mt-4 grid gap-2">
+                  <ResultBlock label="Net Satış (KDV Hariç)" value={formatTry(summary.netSales)} />
+                  <ResultBlock label="Komisyon" value={formatTry(summary.commission)} />
+                  <ResultBlock label="Net Kâr" value={formatTry(summary.netProfit)} emphasis />
+                  <ResultBlock label="Hedef Kâr Farkı" value={summary.targetGapLabel} />
+                </div>
               </>
             ) : (
-              <p className="mt-2 text-sm text-slate-500">Analiz sonrası fiyat konumu burada gösterilir.</p>
+              <p className="mt-2 text-sm text-slate-500">Analiz sonrası fiyat konumu ve kârlılık özeti burada gösterilir.</p>
             )}
           </section>
         </aside>
@@ -220,14 +278,44 @@ function RangeMarker({ left, label }: { left: number; label: string }) {
   );
 }
 
+function ResultBlock({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) {
+  return (
+    <div className={emphasis ? 'rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-sm' : 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-2'}>
+      <p className={emphasis ? 'text-[11px] text-slate-600' : 'text-[11px] text-slate-500'}>{label}</p>
+      <p className={emphasis ? 'number-display text-base font-semibold text-slate-900' : 'number-display text-sm font-semibold text-slate-900'}>{value}</p>
+    </div>
+  );
+}
+
 function parseProductInputs(form: ProductFormState) {
   const commissionRate = parseNumber(form.commissionRate);
+  const vatRate = parseVatNumber(form.vatRate);
   return {
     salesPrice: parseNumber(form.salesPrice),
     costPrice: parseNumber(form.costPrice),
     targetProfit: parseNumber(form.targetProfit),
     commissionRate,
+    vatRate,
     commissionValid: commissionRate >= 0 && commissionRate < 100
+  };
+}
+
+function calculateProfitSummary(parsed: ReturnType<typeof parseProductInputs>) {
+  const effectivePrice = parsed.salesPrice;
+  const vatRateDecimal = parsed.vatRate / 100;
+  const netSales = effectivePrice / (1 + vatRateDecimal);
+  const commission = effectivePrice * (parsed.commissionRate / 100);
+  const shippingCost = 0;
+  const advertisingCost = 0;
+  const netProfit = netSales - (parsed.costPrice + shippingCost + advertisingCost + commission);
+  const targetGap = netProfit - parsed.targetProfit;
+
+  return {
+    netSales,
+    commission,
+    netProfit,
+    targetGap,
+    targetGapLabel: targetGap >= 0 ? 'Hedef kârı karşılıyor.' : 'Hedef kârın altında.'
   };
 }
 
@@ -288,6 +376,7 @@ function buildProductAiLines({
   targetProfit,
   costPrice,
   commissionRate,
+  vatRate,
   stats,
   bandLabel
 }: {
@@ -295,13 +384,15 @@ function buildProductAiLines({
   targetProfit: number;
   costPrice: number;
   commissionRate: number;
+  vatRate: number;
   stats: ReturnType<typeof computeStats>;
   bandLabel: string;
 }) {
   const effectivePrice = myPrice;
+  const netSales = effectivePrice / (1 + vatRate / 100);
   const commissionRateDecimal = clamp(commissionRate / 100, 0, 0.9999);
   const commission = effectivePrice * commissionRateDecimal;
-  const estimatedNet = effectivePrice - costPrice - commission;
+  const estimatedNet = netSales - costPrice - commission;
 
   const lines = [`🧭 Ürün fiyat konumu: ${bandLabel}.`];
 
@@ -323,6 +414,8 @@ function buildProductAiLines({
     lines.push('⚠️ Üst çeyreğin üzerinde kaldığın için talep düşüş riskini kontrol et.');
   }
 
+  lines.push('⚠️ Hesaplama KDV hariç net satış üzerinden yapılır.');
+
   return lines.slice(0, 4);
 }
 
@@ -343,6 +436,12 @@ function quantile(values: number[], q: number) {
 function parseNumber(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+}
+
+function parseVatNumber(value: string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 20;
+  return Math.max(0, parsed);
 }
 
 function round2(value: number) {
