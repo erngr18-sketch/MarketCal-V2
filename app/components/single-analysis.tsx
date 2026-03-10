@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
+import { calculateVatAwarePricing } from '@/lib/profit/pricing-engine';
 
 type SingleInput = {
   salesPrice: number;
@@ -279,22 +280,26 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function calculate(input: SingleInput) {
   const discountRate = input.campaignEnabled ? clamp(input.discountRate, 0, 100) : 0;
   const couponValue = input.campaignEnabled ? Math.max(0, input.couponValue) : 0;
-  const vatRate = Math.max(0, input.vatRate);
+  const pricing = calculateVatAwarePricing({
+    salesPrice: input.salesPrice,
+    costPrice: input.costPrice,
+    commissionRate: input.commissionRate,
+    shippingCost: input.shippingCost,
+    advertisingCost: input.advertisingCost,
+    targetProfit: input.targetProfit,
+    vatRate: input.vatRate,
+    discountRate,
+    couponValue
+  });
 
-  const effectivePrice = Math.max(0, input.salesPrice - input.salesPrice * (discountRate / 100) - couponValue);
-  const netSales = effectivePrice / (1 + vatRate / 100);
-  const commission = effectivePrice * (clamp(input.commissionRate, 0, 100) / 100);
-  const netProfit = netSales - (input.costPrice + input.shippingCost + input.advertisingCost + commission);
-  const marginPct = netSales > 0 ? (netProfit / netSales) * 100 : 0;
-
-  const status: Status = netProfit < 0 ? 'loss' : netProfit >= input.targetProfit ? 'ok' : 'weak';
+  const status: Status = pricing.netProfit < 0 ? 'loss' : pricing.netProfit >= input.targetProfit ? 'ok' : 'weak';
 
   return {
-    effectivePrice,
-    netSales,
-    commission,
-    netProfit,
-    marginPct,
+    effectivePrice: pricing.effectivePrice,
+    netSales: pricing.netSales,
+    commission: pricing.commissionAmount,
+    netProfit: pricing.netProfit,
+    marginPct: pricing.marginPct,
     status
   };
 }

@@ -1,3 +1,5 @@
+import { calculateVatAwarePricing, round2 } from '@/lib/profit/pricing-engine';
+
 export type CompareRowInput = {
   marketplaceId: string;
   salesPrice: number;
@@ -63,28 +65,33 @@ export function calculateCompare(input: CompareEngineInput): CompareEngineOutput
       couponValue = 0;
     }
 
-    const effectivePrice = Math.max(0, row.salesPrice - row.salesPrice * (discountRate / 100) - couponValue);
-    const vatRate = Math.max(0, row.vatRate) / 100;
-    const netSales = effectivePrice / (1 + vatRate);
+    const pricing = calculateVatAwarePricing({
+      salesPrice: row.salesPrice,
+      costPrice: row.costPrice,
+      commissionRate: row.commissionRate,
+      shippingCost: row.shippingCost,
+      advertisingCost: row.advertisingCost,
+      targetProfit: row.targetProfit,
+      vatRate: row.vatRate,
+      discountRate,
+      couponValue
+    });
     const commissionRate = clamp(row.commissionRate / 100, 0, 0.8);
-    const commissionAmount = effectivePrice * commissionRate;
-
-    const netProfit = netSales - (row.costPrice + row.shippingCost + row.advertisingCost + commissionAmount);
-    const status: RowStatus = netProfit < 0 ? 'loss' : netProfit >= row.targetProfit ? 'on_target' : 'borderline';
+    const status: RowStatus = pricing.netProfit < 0 ? 'loss' : pricing.netProfit >= row.targetProfit ? 'on_target' : 'borderline';
 
     const dr = discountRate / 100;
     const fixedCosts = row.costPrice + row.shippingCost + row.advertisingCost;
     const denominator = (1 - dr) * (1 - commissionRate);
     const minRequiredSalesPrice =
-      denominator <= 0 ? 0 : round2(((row.targetProfit + fixedCosts + couponValue * (1 - commissionRate)) / denominator) * (1 + vatRate));
+      denominator <= 0 ? 0 : round2(((row.targetProfit + fixedCosts + couponValue * (1 - commissionRate)) / denominator) * (1 + row.vatRate / 100));
     const alreadyAboveMinPrice = row.salesPrice >= minRequiredSalesPrice;
 
     return {
       marketplaceId: row.marketplaceId,
-      effectivePrice,
-      netSales,
-      commissionAmount,
-      netProfit,
+      effectivePrice: pricing.effectivePrice,
+      netSales: pricing.netSales,
+      commissionAmount: pricing.commissionAmount,
+      netProfit: pricing.netProfit,
       status,
       minRequiredSalesPrice,
       suggestedSalesPrice: minRequiredSalesPrice,
@@ -224,10 +231,6 @@ function formatMarketplaceId(value: string) {
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, value));
-}
-
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
 }
 
 export function formatCurrency(value: number): string {

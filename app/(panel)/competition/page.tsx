@@ -9,6 +9,7 @@ import {
   type CompetitionMode,
   type CompetitionOutput
 } from '@/lib/profit/competition-engine';
+import { calculateVatAwarePricing } from '@/lib/profit/pricing-engine';
 
 const EXAMPLE_TRENDYOL_SR_URL = 'https://www.trendyol.com/sr?qt=kazak&st=kazak';
 
@@ -554,38 +555,34 @@ function parseInputs(form: FormState) {
 }
 
 function calculateProfitMetrics(parsed: ReturnType<typeof parseInputs>) {
-  const effectivePrice = parsed.myPrice;
-  const vatRate = Math.max(0, parsed.vatRate) / 100;
-  const netSales = effectivePrice / (1 + vatRate);
-  const commissionRate = clamp(parsed.commissionRate / 100, 0, 0.9999);
-  const commissionAmount = effectivePrice * commissionRate;
-  const netProfit = netSales - parsed.costPrice - commissionAmount - parsed.shippingCost - parsed.advertisingCost;
-  const distanceToTarget = parsed.targetProfit - netProfit;
-  const targetGap = netProfit - parsed.targetProfit;
-  const denominator = 1 - commissionRate;
-  const suggestedPrice =
-    denominator <= 0
-      ? effectivePrice
-      : ((parsed.targetProfit + parsed.costPrice + parsed.shippingCost + parsed.advertisingCost) / denominator) * (1 + vatRate);
-  const safeSuggestedPrice = Number.isFinite(suggestedPrice) ? Math.max(0, suggestedPrice) : effectivePrice;
-  const priceSufficientForTarget = effectivePrice >= safeSuggestedPrice;
+  const pricing = calculateVatAwarePricing({
+    salesPrice: parsed.myPrice,
+    costPrice: parsed.costPrice,
+    commissionRate: parsed.commissionRate,
+    shippingCost: parsed.shippingCost,
+    advertisingCost: parsed.advertisingCost,
+    targetProfit: parsed.targetProfit,
+    vatRate: parsed.vatRate
+  });
+  const distanceToTarget = parsed.targetProfit - pricing.netProfit;
+  const priceSufficientForTarget = parsed.myPrice >= pricing.suggestedSalesPrice;
 
-  const statusLabel = netProfit >= parsed.targetProfit ? 'Hedefte' : netProfit >= 0 ? 'Sınırda' : 'Zararda';
-  const targetGapLabel = targetGap >= 0 ? 'Hedef kârı karşılıyor.' : 'Hedef kârın altında.';
-  const targetGapHelper = targetGap >= 0 ? 'Hedef kârı karşılıyor.' : 'Hedef kârın altında.';
+  const statusLabel = pricing.netProfit >= parsed.targetProfit ? 'Hedefte' : pricing.netProfit >= 0 ? 'Sınırda' : 'Zararda';
+  const targetGapLabel = pricing.targetGap >= 0 ? 'Hedef kârı karşılıyor.' : 'Hedef kârın altında.';
+  const targetGapHelper = pricing.targetGap >= 0 ? 'Hedef kârı karşılıyor.' : 'Hedef kârın altında.';
   const suggestedPriceMessage = priceSufficientForTarget
     ? 'Mevcut fiyat hedef kâr için yeterli görünüyor.'
-    : `Hedef kâra yaklaşmak için fiyatını yaklaşık ${formatTry(safeSuggestedPrice)} seviyesine çıkarman gerekebilir.`;
+    : `Hedef kâra yaklaşmak için fiyatını yaklaşık ${formatTry(pricing.suggestedSalesPrice)} seviyesine çıkarman gerekebilir.`;
 
   return {
-    netSales,
-    commissionAmount,
-    netProfit,
+    netSales: pricing.netSales,
+    commissionAmount: pricing.commissionAmount,
+    netProfit: pricing.netProfit,
     distanceToTarget,
-    targetGap,
+    targetGap: pricing.targetGap,
     targetGapLabel,
     targetGapHelper,
-    suggestedPrice: safeSuggestedPrice,
+    suggestedPrice: pricing.suggestedSalesPrice,
     suggestedPriceMessage,
     priceSufficientForTarget,
     statusLabel

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
+import { calculateVatAwarePricing } from '@/lib/profit/pricing-engine';
 
 type ProductMode = 'best_sellers' | 'most_reviewed';
 
@@ -301,21 +302,22 @@ function parseProductInputs(form: ProductFormState) {
 }
 
 function calculateProfitSummary(parsed: ReturnType<typeof parseProductInputs>) {
-  const effectivePrice = parsed.salesPrice;
-  const vatRateDecimal = parsed.vatRate / 100;
-  const netSales = effectivePrice / (1 + vatRateDecimal);
-  const commission = effectivePrice * (parsed.commissionRate / 100);
-  const shippingCost = 0;
-  const advertisingCost = 0;
-  const netProfit = netSales - (parsed.costPrice + shippingCost + advertisingCost + commission);
-  const targetGap = netProfit - parsed.targetProfit;
+  const pricing = calculateVatAwarePricing({
+    salesPrice: parsed.salesPrice,
+    costPrice: parsed.costPrice,
+    commissionRate: parsed.commissionRate,
+    shippingCost: 0,
+    advertisingCost: 0,
+    targetProfit: parsed.targetProfit,
+    vatRate: parsed.vatRate
+  });
 
   return {
-    netSales,
-    commission,
-    netProfit,
-    targetGap,
-    targetGapLabel: targetGap >= 0 ? 'Hedef kârı karşılıyor.' : 'Hedef kârın altında.'
+    netSales: pricing.netSales,
+    commission: pricing.commissionAmount,
+    netProfit: pricing.netProfit,
+    targetGap: pricing.targetGap,
+    targetGapLabel: pricing.targetGap >= 0 ? 'Hedef kârı karşılıyor.' : 'Hedef kârın altında.'
   };
 }
 
@@ -388,11 +390,15 @@ function buildProductAiLines({
   stats: ReturnType<typeof computeStats>;
   bandLabel: string;
 }) {
-  const effectivePrice = myPrice;
-  const netSales = effectivePrice / (1 + vatRate / 100);
-  const commissionRateDecimal = clamp(commissionRate / 100, 0, 0.9999);
-  const commission = effectivePrice * commissionRateDecimal;
-  const estimatedNet = netSales - costPrice - commission;
+  const pricing = calculateVatAwarePricing({
+    salesPrice: myPrice,
+    costPrice,
+    commissionRate,
+    shippingCost: 0,
+    advertisingCost: 0,
+    targetProfit,
+    vatRate
+  });
 
   const lines = [`🧭 Ürün fiyat konumu: ${bandLabel}.`];
 
@@ -404,10 +410,10 @@ function buildProductAiLines({
     lines.push('✅ Dengeli aralıkta görünüyorsun; marjı bozmadan küçük optimizasyonlarla ilerle.');
   }
 
-  if (estimatedNet < targetProfit) {
-    lines.push(`⚠️ Tahmini net kâr (${formatTry(estimatedNet)}) hedef kârın altında; maliyet ve fiyat varsayımlarını yeniden dengele.`);
+  if (pricing.netProfit < targetProfit) {
+    lines.push(`⚠️ Tahmini net kâr (${formatTry(pricing.netProfit)}) hedef kârın altında; maliyet ve fiyat varsayımlarını yeniden dengele.`);
   } else {
-    lines.push(`⚠️ Tahmini net kâr (${formatTry(estimatedNet)}) hedefe yakın; komisyon ve maliyetleri panelden teyit et.`);
+    lines.push(`⚠️ Tahmini net kâr (${formatTry(pricing.netProfit)}) hedefe yakın; komisyon ve maliyetleri panelden teyit et.`);
   }
 
   if (myPrice > stats.upperQuartile) {
