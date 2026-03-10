@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
-import type { CategoryAnalysisResponse, ListingPriceStats } from '@/lib/listing-analysis/types';
+import { buildDeterministicSummary, stringifyDeterministicSummary } from '@/lib/listing-analysis/summary';
+import type { CategoryAnalysisResponse, DeterministicSummary, ListingPriceStats } from '@/lib/listing-analysis/types';
 import { formatTry, runCompetition, type CompetitionMode, type CompetitionOutput } from '@/lib/profit/competition-engine';
 import { validateListingUrl } from '@/lib/listing-analysis/validate-url';
 import { calculateVatAwarePricing } from '@/lib/profit/pricing-engine';
@@ -88,6 +89,24 @@ export default function CompetitionPage() {
   const displaySourceLabel = isManualMode ? 'Manual Veri' : analysis ? 'Gerçek Listing Analizi' : result ? 'Simülasyon' : '';
   const displayPercentile = displayStats ? Math.round(positionPercent(parsed.myPrice, displayStats.min, displayStats.max)) : null;
   const displayBandLabel = displayStats ? positionLabelByPrice(parsed.myPrice, displayStats) : null;
+  const deterministicSummary = useMemo<DeterministicSummary | null>(() => {
+    if (!displayStats || !displayBandLabel) return null;
+
+    return buildDeterministicSummary({
+      sourceType: result?.sourceType ?? 'trendyol',
+      normalizedUrl: result?.normalizedUrl,
+      stats: displayStats,
+      myPrice: parsed.myPrice,
+      bandLabel: displayBandLabel,
+      segmentLabel: displayBandLabel,
+      netProfit: profit.netProfit,
+      targetGap: profit.targetGap,
+      suggestedPrice: profit.suggestedPrice,
+      pricesCount: analysis?.pricesCount,
+      usedRealAnalysis: Boolean(analysis && !isManualMode),
+      usedFallback: Boolean(!analysis)
+    });
+  }, [analysis, displayBandLabel, displayStats, isManualMode, parsed.myPrice, profit.netProfit, profit.suggestedPrice, profit.targetGap, result?.normalizedUrl, result?.sourceType]);
 
   const canRun = useMemo(() => {
     if (!urlValidation.ok) return false;
@@ -176,6 +195,24 @@ export default function CompetitionPage() {
 
   const aiItems = useMemo(() => {
     const items: AiPanelItem[] = [];
+    const deterministicText = deterministicSummary ? stringifyDeterministicSummary(deterministicSummary) : '';
+
+    if (deterministicSummary) {
+      items.push({
+        icon: 'spark',
+        tone: 'neutral',
+        text: deterministicSummary.headline,
+        emphasis: true
+      });
+
+      for (const bullet of deterministicSummary.bullets) {
+        items.push({
+          icon: 'check',
+          tone: 'neutral',
+          text: bullet
+        });
+      }
+    }
 
     if (isAnalyzing) {
       items.push({
@@ -186,12 +223,12 @@ export default function CompetitionPage() {
       });
     }
 
-    if (displaySummary) {
+    if (displaySummary && normalizePanelText(displaySummary) !== normalizePanelText(deterministicText)) {
       items.push({
-        icon: 'spark',
+        icon: 'info',
         tone: 'neutral',
         text: displaySummary,
-        emphasis: true
+        emphasis: false
       });
     }
 
@@ -232,6 +269,14 @@ export default function CompetitionPage() {
       items.push(...result.assistantMessage.split('\n').map(mapAssistantLineToItem));
     }
 
+    if (deterministicSummary) {
+      items.push({
+        icon: 'alert',
+        tone: 'warning',
+        text: deterministicSummary.warning
+      });
+    }
+
     const uniqueItems: AiPanelItem[] = [];
     const seen = new Set<string>();
     for (const item of items) {
@@ -246,7 +291,7 @@ export default function CompetitionPage() {
     }
 
     return uniqueItems.slice(0, 5);
-  }, [analysis, displaySummary, isAnalyzing, parsed, profit, result?.assistantMessage]);
+  }, [analysis, deterministicSummary, displaySummary, isAnalyzing, parsed, profit, result?.assistantMessage]);
 
   return (
     <div className="space-y-6">
@@ -484,6 +529,7 @@ export default function CompetitionPage() {
         </section>
 
         <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
+          {deterministicSummary ? <p className="px-1 text-xs text-slate-500">Güven seviyesi: {deterministicSummary.confidenceLabel}</p> : null}
           <AiPanel items={aiItems} />
 
           <section className="card p-5">
@@ -693,6 +739,10 @@ function positionLabelByPrice(price: number, stats: ListingPriceStats): string {
 function displayPosition(value: number, min: number, max: number): number {
   if (!Number.isFinite(value) || !Number.isFinite(min) || !Number.isFinite(max) || max <= min) return 0.5;
   return clamp((value - min) / (max - min), 0, 1);
+}
+
+function normalizePanelText(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr');
 }
 
 async function analyzeListing(input: {

@@ -1,4 +1,4 @@
-import type { ListingAnalysisSummaryInput } from '@/lib/listing-analysis/types';
+import type { DeterministicSummary, ListingAnalysisSummaryInput, SummaryConfidence } from '@/lib/listing-analysis/types';
 import { formatTry } from '@/lib/profit/competition-engine';
 
 type ListingSummaryProvider = {
@@ -6,6 +6,13 @@ type ListingSummaryProvider = {
 };
 
 export async function generateListingSummary(input: ListingAnalysisSummaryInput): Promise<string> {
+  const deterministicSummary = buildDeterministicSummary(input);
+  const deterministicText = stringifyDeterministicSummary(deterministicSummary);
+
+  if (!shouldUseAI(input)) {
+    return deterministicText;
+  }
+
   const provider = getListingSummaryProvider();
   const providerSummary = await provider.generate(input);
 
@@ -13,10 +20,11 @@ export async function generateListingSummary(input: ListingAnalysisSummaryInput)
     return normalizeSummary(providerSummary);
   }
 
-  return buildFallbackSummary(input);
+  return deterministicText;
 }
 
 export function buildListingSummaryPrompt(input: ListingAnalysisSummaryInput): string {
+  const deterministicSummary = buildDeterministicSummary(input);
   const compactPayload = JSON.stringify({
     sourceType: input.sourceType,
     normalizedUrl: input.normalizedUrl,
@@ -26,21 +34,51 @@ export function buildListingSummaryPrompt(input: ListingAnalysisSummaryInput): s
     segmentLabel: input.segmentLabel,
     netProfit: input.netProfit,
     targetGap: input.targetGap,
-    suggestedPrice: input.suggestedPrice
+    suggestedPrice: input.suggestedPrice,
+    pricesCount: input.pricesCount,
+    usedRealAnalysis: input.usedRealAnalysis,
+    usedFallback: input.usedFallback,
+    deterministicSummary
   });
 
   return [
     'Sen e-ticaret fiyat karar desteği veren kısa bir assistantsın.',
-    'Sana sadece küçük ve yapılandırılmış bir JSON verisi verilecek.',
-    'Extraction yapma. HTML isteme. Yeni veri uydurma.',
-    'Sadece verilen fiyat özeti üzerinden karar desteği ver.',
-    'Cevap 2-4 kısa cümle olsun.',
-    'Teknik terim kullanma.',
+    'Sana yalnızca küçük ve yapılandırılmış bir JSON verisi verilecek.',
+    'HTML isteme, extraction yapma, yeni sayı üretme.',
+    'Verilmeyen bilgi ekleme, hesap değiştirme, kesin hüküm verme.',
+    'Deterministic summary gerçeğin ana kaynağıdır; sadece dili daha doğal hale getir.',
+    'En fazla 2 kısa cümle yaz.',
+    'Kısa ve sade Türkçe kullan.',
     '"median" kelimesini hiç kullanma.',
-    'Alt Bant, Orta Seviye ve Üst Bant dilini kullan.',
-    'Aksiyon odaklı ol ve gerekirse daha güvenli fiyat seviyesini söyle.',
+    'Alt Bant, Orta Seviye ve Üst Bant dilini koru.',
     `Veri: ${compactPayload}`
   ].join('\n');
+}
+
+export function buildDeterministicSummary(input: ListingAnalysisSummaryInput): DeterministicSummary {
+  const bullets: string[] = [];
+
+  bullets.push(profitBullet(input));
+  bullets.push(targetBullet(input));
+
+  const priceAction = suggestedPriceBullet(input);
+  if (priceAction) {
+    bullets.push(priceAction);
+  }
+
+  const confidence = confidenceFromInput(input);
+
+  return {
+    headline: headlineByBand(input.bandLabel),
+    bullets: bullets.filter(Boolean).slice(0, 3),
+    warning: 'Analiz sonucu yol göstericidir; kritik karar öncesi verileri kontrol edin.',
+    confidence,
+    confidenceLabel: confidenceLabel(confidence)
+  };
+}
+
+export function stringifyDeterministicSummary(summary: DeterministicSummary): string {
+  return normalizeSummary([summary.headline, ...summary.bullets].filter(Boolean).join(' '));
 }
 
 function getListingSummaryProvider(): ListingSummaryProvider {
@@ -51,56 +89,73 @@ function getListingSummaryProvider(): ListingSummaryProvider {
   };
 }
 
-function buildFallbackSummary(input: ListingAnalysisSummaryInput): string {
-  const sentences: string[] = [];
-  const priceDeltaToMiddle = input.myPrice - input.stats.median;
-  const middleAbsDelta = Math.abs(priceDeltaToMiddle);
-  const middleRatio = input.stats.median > 0 ? middleAbsDelta / input.stats.median : 0;
+function shouldUseAI(input: ListingAnalysisSummaryInput): boolean {
+  return Boolean(input.usedRealAnalysis && !input.usedFallback);
+}
 
-  if (input.bandLabel === 'Alt Bant') {
-    sentences.push('Fiyatın şu an Alt Bantta ve pazarda dikkat çekme ihtimali yüksek görünüyor.');
-  } else if (input.bandLabel === 'Üst Bant') {
-    sentences.push('Fiyatın şu an Üst Bantta; farkını anlatamazsan karar vermeyi zorlaştırabilir.');
-  } else if (middleRatio <= 0.08) {
-    sentences.push('Fiyatın pazarın orta seviyesine yakın görünüyor.');
-  } else {
-    sentences.push('Fiyatın şu an Orta Seviyede ve dengeli bir noktada duruyor.');
+function headlineByBand(bandLabel: string): string {
+  if (bandLabel === 'Alt Bant') return 'Fiyatın pazarın alt bandında görünüyor.';
+  if (bandLabel === 'Üst Bant') return 'Fiyatın pazarın üst bandında görünüyor.';
+  return 'Fiyatın pazar ortalığına yakın görünüyor.';
+}
+
+function profitBullet(input: ListingAnalysisSummaryInput): string {
+  if (typeof input.netProfit !== 'number') {
+    return 'Bu tabloyu satış ve dönüşümle birlikte izlemek faydalı olur.';
+  }
+  if (input.netProfit < 0) {
+    return 'Mevcut senaryoda net kâr negatif görünüyor.';
+  }
+  if (input.netProfit < Math.max(25, input.myPrice * 0.05)) {
+    return 'Mevcut senaryoda net kâr pozitife yakın görünüyor.';
+  }
+  return 'Mevcut senaryoda net kâr pozitif görünüyor.';
+}
+
+function targetBullet(input: ListingAnalysisSummaryInput): string {
+  if (typeof input.targetGap !== 'number') {
+    return input.bandLabel === 'Üst Bant'
+      ? 'Bu seviyede satış gerekçesini daha net göstermen gerekebilir.'
+      : 'Mevcut seviyeyi kısa testlerle izlemek mantıklı olur.';
+  }
+  if (input.targetGap < 0) {
+    return 'Hedef kârın altında kalıyorsun.';
+  }
+  return 'Hedef kârı karşılıyorsun.';
+}
+
+function suggestedPriceBullet(input: ListingAnalysisSummaryInput): string {
+  if (typeof input.suggestedPrice !== 'number' || input.suggestedPrice <= 0) {
+    return '';
   }
 
-  if (typeof input.netProfit === 'number' && typeof input.targetGap === 'number') {
-    if (input.netProfit < 0) {
-      sentences.push('Bu senaryoda karlilik negatif görünüyor; maliyet veya fiyat tarafında düzeltme gerekli.');
-    } else if (input.targetGap < 0) {
-      sentences.push('Mevcut senaryoda karlilik pozitif ama hedef karın altında kalıyor.');
-    } else {
-      sentences.push('Bu senaryoda karlilik pozitif ve hedef karı karşılıyor.');
-    }
-  } else if (input.segmentLabel === 'En Karlı' || input.segmentLabel === 'Hedefte') {
-    sentences.push('Pazardaki konumun şu an güvenli bir aralıkta görünüyor.');
-  } else {
-    sentences.push('Kararı güçlendirmek için fiyatı biraz daha net konumlandırman faydalı olabilir.');
+  const delta = input.suggestedPrice - input.myPrice;
+  if (delta >= 1) {
+    return `Yaklaşık ${formatTry(input.suggestedPrice)} seviyesi daha güvenli olabilir.`;
   }
-
-  if (typeof input.suggestedPrice === 'number' && input.suggestedPrice > 0) {
-    const suggestedDelta = input.suggestedPrice - input.myPrice;
-    if (suggestedDelta >= 1) {
-      sentences.push(`Yaklaşık ${formatTry(input.suggestedPrice)} seviyesi daha güvenli olabilir.`);
-    } else if (suggestedDelta <= -1) {
-      sentences.push(`Yaklaşık ${formatTry(input.suggestedPrice)} seviyesiyle daha rekabetçi kalabilirsin.`);
-    } else if (input.bandLabel === 'Üst Bant') {
-      sentences.push('Küçük bir fiyat düzenlemesi dönüşümü destekleyebilir.');
-    } else {
-      sentences.push('Mevcut fiyatı küçük testlerle koruyup sonucu izlemek mantıklı görünüyor.');
-    }
-  } else if (input.bandLabel === 'Üst Bant') {
-    sentences.push('Daha rahat satış için fiyatı biraz aşağı çekmeyi test edebilirsin.');
-  } else if (input.bandLabel === 'Alt Bant') {
-    sentences.push('Talep güçlü kalırsa fiyatı küçük adımlarla yukarı test edebilirsin.');
-  } else {
-    sentences.push('Bu seviyeyi koruyup dönüşüm ve kar dengesini birlikte izlemek mantıklı olur.');
+  if (delta <= -1) {
+    return `Yaklaşık ${formatTry(input.suggestedPrice)} seviyesi daha dengeli olabilir.`;
   }
+  if (input.bandLabel === 'Üst Bant') {
+    return 'Küçük bir fiyat denemesi satış ihtimalini destekleyebilir.';
+  }
+  return 'Bu fiyatı küçük adımlarla test ederek ilerleyebilirsin.';
+}
 
-  return normalizeSummary(sentences.slice(0, 3).join(' '));
+function confidenceFromInput(input: ListingAnalysisSummaryInput): SummaryConfidence {
+  if (input.usedRealAnalysis && (input.pricesCount ?? 0) >= 12) {
+    return 'high';
+  }
+  if (input.usedRealAnalysis && (input.pricesCount ?? 0) >= 6) {
+    return 'medium';
+  }
+  return 'low';
+}
+
+function confidenceLabel(confidence: SummaryConfidence): string {
+  if (confidence === 'high') return 'Yüksek güven';
+  if (confidence === 'medium') return 'Orta güven';
+  return 'Düşük güven';
 }
 
 function normalizeSummary(summary: string): string {

@@ -14,6 +14,16 @@ export type ListingPriceStats = {
   max: number;
 };
 
+export type SummaryConfidence = 'high' | 'medium' | 'low';
+
+export type DeterministicSummary = {
+  headline: string;
+  bullets: string[];
+  warning: string;
+  confidence: SummaryConfidence;
+  confidenceLabel: string;
+};
+
 export type ListingAnalysisSummaryInput = {
   sourceType: ListingSourceType;
   normalizedUrl?: string;
@@ -24,6 +34,9 @@ export type ListingAnalysisSummaryInput = {
   netProfit?: number;
   targetGap?: number;
   suggestedPrice?: number;
+  pricesCount?: number;
+  usedRealAnalysis?: boolean;
+  usedFallback?: boolean;
 };
 
 export type CategoryAnalysisRequestBody = {
