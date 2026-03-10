@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
+import { DecisionHero, InfoNote, MetricCard } from '@/app/components/ui/clarity';
 import { calculateVatAwarePricing } from '@/lib/profit/pricing-engine';
 
 type ProductMode = 'best_sellers' | 'most_reviewed';
@@ -48,6 +49,12 @@ export default function CompetitionProductPage() {
   const linkValidation = useMemo(() => validateTrendyolProductUrl(form.productUrl), [form.productUrl]);
   const parsed = useMemo(() => parseProductInputs(form), [form]);
   const summary = useMemo(() => calculateProfitSummary(parsed), [parsed]);
+  const decisionTitle = analysis
+    ? buildProductDecisionTitle({ netProfit: summary.netProfit, targetGap: summary.targetGap, bandLabel: analysis.bandLabel })
+    : 'Ürün linki ve fiyat senaryosu hazır olduğunda ürün bazlı kâr özeti burada görünür.';
+  const decisionDetail = analysis
+    ? `${analysis.bandLabel} görünüyorsun. Net kâr ${formatTry(summary.netProfit)} ve önerilen satış fiyatı ${formatTry(summary.suggestedSalesPrice)}.`
+    : 'Bu ekran ürün bazında kâr var mı, hedefe ne kadar uzak ve önerilen fiyat ne sorularını tek alanda cevaplar.';
 
   const canAnalyze =
     form.productUrl.trim().length > 0 &&
@@ -95,6 +102,18 @@ export default function CompetitionProductPage() {
         <p className="mt-1 text-sm text-slate-600">Trendyol sonuçlarına göre fiyat bandını ve konumunu gör.</p>
         <p className="mt-1 text-xs text-slate-500">Linki gir → senaryonu tamamla → analizi başlat</p>
       </section>
+
+      <DecisionHero
+        eyebrow="Ana karar"
+        title={decisionTitle}
+        detail={decisionDetail}
+        metrics={[
+          { label: 'Ürün durumu', value: analysis ? profitLabel(summary.netProfit, summary.targetGap) : '-', tone: productTone(summary.netProfit, summary.targetGap) },
+          { label: 'Net kâr', value: formatTry(summary.netProfit), tone: productTone(summary.netProfit, summary.targetGap) },
+          { label: 'Hedef kâr farkı', value: formatTry(summary.targetGap), tone: summary.targetGap >= 0 ? 'success' : 'warning' },
+          { label: 'Önerilen fiyat', value: formatTry(summary.suggestedSalesPrice), tone: 'accent' }
+        ]}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-6">
@@ -232,10 +251,29 @@ export default function CompetitionProductPage() {
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-          <AiPanel items={(analysis?.aiLines ?? ['⏱️ Analiz için girdileri tamamlayın.', '⚠️ Hesaplama KDV hariç net satış üzerinden yapılır.']).map(mapAiLineToItem)} />
+          <section className="card p-5">
+            <h3 className="card-title">Ürün özeti</h3>
+            {analysis ? (
+              <div className="mt-4 grid gap-2">
+                <MetricCard label="Pazar konumu" value={analysis.bandLabel} tone={analysis.bandLabel === 'Dengeli Konum' ? 'success' : analysis.bandLabel === 'Pahalı Konum' ? 'warning' : 'neutral'} />
+                <MetricCard label="Net satış" value={formatTry(summary.netSales)} />
+                <MetricCard label="Net kâr" value={formatTry(summary.netProfit)} tone={productTone(summary.netProfit, summary.targetGap)} emphasis />
+                <MetricCard label="Hedef kâr farkı" value={formatTry(summary.targetGap)} tone={summary.targetGap >= 0 ? 'success' : 'warning'} />
+                <MetricCard label="Önerilen satış fiyatı" value={formatTry(summary.suggestedSalesPrice)} tone="accent" />
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-slate-500">Analiz sonrası ürün bazlı kâr, hedef farkı ve önerilen fiyat burada görünür.</p>
+            )}
+          </section>
+
+          <AiPanel
+            title="Yorum ve öneriler"
+            disclaimer="Bu bölüm yorumdur. Kesin hesaplanan değerler üstteki kartlarda gösterilir."
+            items={(analysis?.aiLines ?? ['⏱️ Analiz için girdileri tamamlayın.', '⚠️ Hesaplama KDV hariç net satış üzerinden yapılır.']).map(mapAiLineToItem)}
+          />
 
           <section className="card p-5">
-            <h3 className="card-title">Pazar Konumu</h3>
+            <h3 className="card-title">Pazar konumu</h3>
             {analysis ? (
               <>
                 <p className="mt-1 text-sm text-slate-600">{analysis.bandLabel} (%{analysis.percentile})</p>
@@ -254,16 +292,21 @@ export default function CompetitionProductPage() {
                 </div>
 
                 <div className="mt-4 grid gap-2">
-                  <ResultBlock label="Net Satış (KDV Hariç)" value={formatTry(summary.netSales)} />
-                  <ResultBlock label="Komisyon" value={formatTry(summary.commission)} />
-                  <ResultBlock label="Net Kâr" value={formatTry(summary.netProfit)} emphasis />
-                  <ResultBlock label="Hedef Kâr Farkı" value={formatTry(summary.targetGap)} />
+                  <MetricCard label="Alt bant" value={formatTry(analysis.lowerQuartile)} />
+                  <MetricCard label="Pazar ortası" value={formatTry(analysis.median)} tone="success" />
+                  <MetricCard label="Üst bant" value={formatTry(analysis.upperQuartile)} tone="warning" />
                 </div>
               </>
             ) : (
               <p className="mt-2 text-sm text-slate-500">Analiz sonrası fiyat konumu ve kârlılık özeti burada gösterilir.</p>
             )}
           </section>
+
+          <InfoNote
+            label="Kontrol notu"
+            text="Veri kaynağı ürün linkinden türetilen otomatik analizdir. Son kararı vermeden önce gerçek mağaza koşullarını panelden doğrula."
+            tone="warning"
+          />
         </aside>
       </div>
     </div>
@@ -275,15 +318,6 @@ function RangeMarker({ left, label }: { left: number; label: string }) {
     <div className="absolute top-2 -translate-x-1/2" style={{ left: `${left}%` }}>
       <div className="h-2 w-px bg-slate-300" />
       <span className="mt-1 block whitespace-nowrap text-[10px] text-slate-500">{label}</span>
-    </div>
-  );
-}
-
-function ResultBlock({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) {
-  return (
-    <div className={emphasis ? 'rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-sm' : 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-2'}>
-      <p className={emphasis ? 'text-[11px] text-slate-600' : 'text-[11px] text-slate-500'}>{label}</p>
-      <p className={emphasis ? 'number-display text-base font-semibold text-slate-900' : 'number-display text-sm font-semibold text-slate-900'}>{value}</p>
     </div>
   );
 }
@@ -319,6 +353,34 @@ function calculateProfitSummary(parsed: ReturnType<typeof parseProductInputs>) {
     targetGap: pricing.targetGap,
     suggestedSalesPrice: pricing.suggestedSalesPrice
   };
+}
+
+function buildProductDecisionTitle({
+  netProfit,
+  targetGap,
+  bandLabel
+}: {
+  netProfit: number;
+  targetGap: number;
+  bandLabel: string;
+}) {
+  if (netProfit < 0) return 'Bu ürün fiyatı mevcut varsayımlarla zarar riski taşıyor.';
+  if (targetGap < 0) return 'Ürün kârda ama hedef kâr için fiyatı güçlendirmek gerekiyor.';
+  if (bandLabel === 'Ucuz Konum') return 'Ürün pazarda daha uygun görünüyor ve hedef kârı destekliyor.';
+  if (bandLabel === 'Dengeli Konum') return 'Ürün pazarda dengeli görünüyor ve hedef kârı karşılıyor.';
+  return 'Ürün üst fiyat bandında; kâr var ama talep tepkisini izlemelisin.';
+}
+
+function productTone(netProfit: number, targetGap: number): 'success' | 'warning' | 'danger' {
+  if (netProfit < 0) return 'danger';
+  if (targetGap < 0) return 'warning';
+  return 'success';
+}
+
+function profitLabel(netProfit: number, targetGap: number) {
+  if (netProfit < 0) return 'Zarar';
+  if (targetGap < 0) return 'Hedef altı';
+  return 'Hedefte';
 }
 
 function validateTrendyolProductUrl(rawUrl: string) {

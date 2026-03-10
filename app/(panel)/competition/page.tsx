@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
+import { DecisionHero, InfoNote, MetricCard } from '@/app/components/ui/clarity';
 import { buildDeterministicSummary, stringifyDeterministicSummary } from '@/lib/listing-analysis/summary';
 import type { CategoryAnalysisResponse, DeterministicSummary, ListingPriceStats } from '@/lib/listing-analysis/types';
 import { formatTry, runCompetition, type CompetitionMode, type CompetitionOutput } from '@/lib/profit/competition-engine';
@@ -116,6 +117,23 @@ export default function CompetitionPage() {
     if (form.manualOpen && !parsed.manualValid) return false;
     return true;
   }, [form.manualOpen, parsed.commissionValid, parsed.costPrice, parsed.manualValid, parsed.myPrice, urlValidation.ok]);
+
+  const decisionTitle = displayStats
+    ? buildCompetitionDecisionTitle({
+        bandLabel: displayBandLabel,
+        netProfit: profit.netProfit,
+        targetGap: profit.targetGap
+      })
+    : 'Önce linki ve senaryonu gir, ardından pazar konumu ile kâr özetini birlikte gör.';
+  const decisionDetail = displayStats
+    ? `${describeMarketPosition(displayPercentile ?? 50)} ${profit.targetGapHelper}`
+    : 'Bu ekran 5 saniyede pazarda nerede olduğunu, kâr edip etmediğini ve hangi fiyatın hedefe yaklaştığını göstermek için düzenlendi.';
+  const sourceDetail = displayStats
+    ? analysis
+      ? `${displaySourceLabel} • ${analysis.pricesCount} fiyat`
+      : displaySourceLabel
+    : 'Analiz bekleniyor';
+  const warningText = deterministicSummary?.warning ?? 'Kesin hesaplanan veriler aşağıdadır. Yorumlar ayrı alanda yalnızca destek amaçlı gösterilir.';
 
   const onRunAnalysis = async () => {
     const nextErrors: ValidationState = {};
@@ -300,6 +318,19 @@ export default function CompetitionPage() {
         <p className="mt-1 text-sm text-slate-600">Trendyol sonuçlarına göre fiyatının pazarda hangi seviyede olduğunu gör.</p>
         <p className="mt-1 text-xs text-slate-500">Linki kontrol et → senaryonu gir → analizi başlat</p>
       </section>
+
+      <DecisionHero
+        eyebrow="Ana karar"
+        title={decisionTitle}
+        detail={decisionDetail}
+        badge={displayBandLabel ? <CompetitionRankBadge segmentLabel={displayBandLabel} /> : undefined}
+        metrics={[
+          { label: 'Pazar konumu', value: displayBandLabel ?? '-', tone: marketToneByBand(displayBandLabel) },
+          { label: 'Net kâr', value: formatTry(profit.netProfit), tone: toneByProfit(profit.netProfit) },
+          { label: 'Hedef kâr farkı', value: formatTry(profit.targetGap), tone: toneByTargetGap(profit.targetGap) },
+          { label: 'Önerilen fiyat', value: formatTry(profit.suggestedPrice), tone: 'accent' }
+        ]}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <section className="card p-6">
@@ -529,20 +560,20 @@ export default function CompetitionPage() {
         </section>
 
         <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-          {deterministicSummary ? <p className="px-1 text-xs text-slate-500">Güven seviyesi: {deterministicSummary.confidenceLabel}</p> : null}
-          <AiPanel items={aiItems} />
-
           <section className="card p-5">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="card-title">Fiyatının Pazardaki Yeri</h3>
+              <h3 className="card-title">Pazar özeti</h3>
               {displayBandLabel ? <CompetitionRankBadge segmentLabel={displayBandLabel} /> : null}
             </div>
 
             {displayStats ? (
               <>
                 <p className="mt-1 text-sm text-slate-600">{describeMarketPosition(displayPercentile ?? 50)}</p>
-                {displaySourceLabel ? <p className="mt-1 text-xs text-slate-500">Veri kaynağı: {displaySourceLabel}</p> : null}
-                {analysis ? <p className="mt-1 text-xs text-slate-500">{analysis.pricesCount} fiyat üzerinden gerçek listing analizi gösteriliyor.</p> : null}
+                <div className="mt-4 grid gap-2">
+                  <MetricCard label="Veri kaynağı" value={sourceDetail} />
+                  <MetricCard label="Güven seviyesi" value={deterministicSummary?.confidenceLabel ?? 'Bekleniyor'} tone="neutral" />
+                  <MetricCard label="Analiz edilen fiyat" value={analysis ? String(analysis.pricesCount) : '3+'} />
+                </div>
 
                 <div className="mt-4">
                   <div className="relative h-2 rounded-full bg-slate-100">
@@ -552,35 +583,37 @@ export default function CompetitionPage() {
                     />
                   </div>
 
-                  <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-                    <Pill label="Alt Bant" value={formatTry(displayStats.q1)} />
-                    <Pill label="Orta Seviye" value={formatTry(displayStats.median)} />
-                    <Pill label="Üst Bant" value={formatTry(displayStats.q3)} />
-                  </div>
-                  <div className="mt-2 space-y-1 text-[11px] text-slate-500">
-                    <p>Alt bant → Daha ucuz ürünler</p>
-                    <p>Orta bant → Pazarın ortalama fiyatı</p>
-                    <p>Üst bant → Daha pahalı ürünler</p>
+                  <div className="mt-3 grid gap-2">
+                    <MetricCard label="Alt bant" value={formatTry(displayStats.q1)} />
+                    <MetricCard label="Orta seviye" value={formatTry(displayStats.median)} tone="success" />
+                    <MetricCard label="Üst bant" value={formatTry(displayStats.q3)} tone="warning" />
                   </div>
                   <p className="mt-2 text-xs font-medium text-slate-700">Senin fiyatın: {formatTry(parsed.myPrice)}</p>
                 </div>
-
-                <div className="mt-4 grid gap-2">
-                  <ResultBlock label="Net Satış (KDV Hariç)" value={formatTry(profit.netSales)} />
-                  <ResultBlock label="Komisyon" value={formatTry(profit.commissionAmount)} />
-                  <ResultBlock label="Net Kâr" value={formatTry(profit.netProfit)} emphasis />
-                  <ResultBlock label="Hedef Kâr Farkı" value={formatTry(profit.targetGap)} />
-                  <ResultBlock label="Önerilen Satış Fiyatı" value={formatTry(profit.suggestedPrice)} accent />
-                </div>
-                <div className="mt-2 space-y-1">
-                  <p className="text-xs text-slate-600">{profit.targetGapHelper}</p>
-                  <p className="text-xs text-slate-600">{profit.suggestedPriceMessage}</p>
-                </div>
               </>
             ) : (
-              <p className="mt-2 text-sm text-slate-500">Analizi başlattığında fiyatının pazardaki yeri ve kârlılık özeti burada görünür.</p>
+              <p className="mt-2 text-sm text-slate-500">Analizi başlattığında pazar konumu, güven seviyesi ve fiyat bantları burada görünür.</p>
             )}
           </section>
+
+          <section className="card p-5">
+            <h3 className="card-title">Kâr özeti</h3>
+            <div className="mt-4 grid gap-2">
+              <MetricCard label="Net satış" value={formatTry(profit.netSales)} />
+              <MetricCard label="Net kâr" value={formatTry(profit.netProfit)} tone={toneByProfit(profit.netProfit)} emphasis />
+              <MetricCard label="Hedef kâr farkı" value={formatTry(profit.targetGap)} tone={toneByTargetGap(profit.targetGap)} hint={profit.targetGapHelper} />
+              <MetricCard label="Önerilen satış fiyatı" value={formatTry(profit.suggestedPrice)} tone="accent" hint={profit.suggestedPriceMessage} />
+            </div>
+          </section>
+
+          <AiPanel
+            title="Yorum ve öneriler"
+            disclaimer="Bu bölüm yorumdur. Kesin hesaplanan veriler üstteki kartlarda gösterilir."
+            items={aiItems}
+          />
+
+          <InfoNote label="Kontrol notu" text={warningText} tone="warning" />
+          <InfoNote label="Hesap notu" text="Net satış ve net kâr hesapları KDV hariç baz alınır." />
         </aside>
       </div>
     </div>
@@ -603,34 +636,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span>{label}</span>
       {children}
     </label>
-  );
-}
-
-function Pill({ label, value }: { label: string; value: string }) {
-  return <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-700">{label}: {value}</span>;
-}
-
-function ResultBlock({
-  label,
-  value,
-  emphasis = false,
-  accent = false
-}: {
-  label: string;
-  value: string;
-  emphasis?: boolean;
-  accent?: boolean;
-}) {
-  const className = emphasis
-    ? 'rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-sm'
-    : accent
-      ? 'rounded-xl border border-sky-200 bg-sky-50/60 px-3 py-2'
-      : 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-2';
-  return (
-    <div className={className}>
-      <p className={emphasis ? 'text-[11px] text-slate-600' : 'text-[11px] text-slate-500'}>{label}</p>
-      <p className={emphasis ? 'number-display text-base font-semibold text-slate-900' : 'number-display text-sm font-semibold text-slate-900'}>{value}</p>
-    </div>
   );
 }
 
@@ -717,6 +722,38 @@ function describeMarketPosition(percentile: number): string {
     return 'Bu fiyat pazardaki ürünlerin ortalama seviyesine yakın.';
   }
   return `Bu fiyat pazardaki ürünlerin yaklaşık %${percentile}'inden daha pahalı.`;
+}
+
+function buildCompetitionDecisionTitle({
+  bandLabel,
+  netProfit,
+  targetGap
+}: {
+  bandLabel: string | null;
+  netProfit: number;
+  targetGap: number;
+}) {
+  if (netProfit < 0) return 'Bu fiyat mevcut giderlerle zarar riski taşıyor.';
+  if (targetGap < 0) return 'Bu fiyat kâr bıraksa da hedef kâr açısından baskı yaratıyor.';
+  if (bandLabel === 'Orta Seviye') return 'Fiyatın pazarın orta seviyesine yakın ve hedef kârı destekliyor.';
+  if (bandLabel === 'Alt Bant') return 'Fiyatın pazarın alt bandında; marjı korumak için artış alanın olabilir.';
+  return 'Fiyatın pazarın üst bandında; talep ve dönüşüm riskini takip etmelisin.';
+}
+
+function toneByProfit(value: number): 'success' | 'warning' | 'danger' {
+  if (value < 0) return 'danger';
+  if (value === 0) return 'warning';
+  return 'success';
+}
+
+function toneByTargetGap(value: number): 'success' | 'warning' {
+  return value >= 0 ? 'success' : 'warning';
+}
+
+function marketToneByBand(bandLabel: string | null): 'neutral' | 'success' | 'warning' {
+  if (bandLabel === 'Orta Seviye') return 'success';
+  if (bandLabel === 'Üst Bant') return 'warning';
+  return 'neutral';
 }
 
 function parseNumber(value: string): number {
