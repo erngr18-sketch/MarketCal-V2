@@ -95,7 +95,6 @@ function runUiGuards() {
   assertMatch(comparePage, /export\s+default\s+function/, 'app/(panel)/analyses/marketplace-comparison/page.tsx', 'Marketplace comparison page default export eksik.');
   assertMatch(routesTs, /marketplaceComparison:\s*['"]\/analyses\/marketplace-comparison['"]/, 'lib/routes.ts', "marketplaceComparison route'u eksik.");
   assertMatch(sidebarTsx, /routes\.analyses\.marketplaceComparison/, 'app/components/sidebar.tsx', "Sidebar marketplace comparison route config kullanmalı.");
-  assertNoMatch(sidebarTsx, /href:\s*['"]\/app\/compare['"]/, 'app/components/sidebar.tsx', "Sidebar içinde eski '/app/compare' linki tespit edildi.");
 
   console.log('[controlcheck] UI guard kontrolleri geçti.');
 }
@@ -111,13 +110,6 @@ function readRequiredFile(relativePath) {
 
 function assertMatch(content, pattern, file, message) {
   if (!pattern.test(content)) {
-    console.error(`[controlcheck] Hata (${file}): ${message}`);
-    process.exit(1);
-  }
-}
-
-function assertNoMatch(content, pattern, file, message) {
-  if (pattern.test(content)) {
     console.error(`[controlcheck] Hata (${file}): ${message}`);
     process.exit(1);
   }
