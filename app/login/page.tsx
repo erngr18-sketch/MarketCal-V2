@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { routes } from '@/lib/routes';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,7 +17,7 @@ export default function LoginPage() {
 
         <button
           type="button"
-          onClick={() => router.push('/app/dashboard')}
+          onClick={() => router.push(routes.dashboard)}
           className="btn btn-primary w-full"
         >
           Panele Devam Et

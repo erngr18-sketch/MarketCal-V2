@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import clsx from 'clsx';
 import type { LucideIcon } from 'lucide-react';
+import { routeLabels, routes } from '@/lib/routes';
 
 type SidebarChildItem = {
   href: string;
@@ -28,23 +29,23 @@ type SidebarGroup = {
 
 const groups: SidebarGroup[] = [
   {
-    items: [{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }]
+    items: [{ href: routes.dashboard, label: routeLabels.dashboard, icon: LayoutDashboard }]
   },
   {
-    label: 'Analizler',
+    label: routeLabels.analyses,
     icon: ChartLine,
     items: [
-      { href: '/single', label: 'Kâr Senaryosu', icon: Calculator },
-      { href: '/compare', label: 'Pazaryeri Karşılaştırma', icon: Scale },
-      { href: '/competition', label: 'Rekabet Analizi', icon: ChartLine },
-      { href: '/competition/product', label: 'Fiyat Konumu', icon: Target }
+      { href: routes.analyses.profitScenario, label: routeLabels.profitScenario, icon: Calculator },
+      { href: routes.analyses.marketplaceComparison, label: routeLabels.marketplaceComparison, icon: Scale },
+      { href: routes.analyses.marketAnalysis, label: routeLabels.marketAnalysis, icon: ChartLine },
+      { href: routes.analyses.pricePosition, label: routeLabels.pricePosition, icon: Target }
     ]
   },
   {
-    items: [{ label: 'Ürünler', icon: Package, disabled: true }]
+    items: [{ href: routes.products, label: routeLabels.products, icon: Package }]
   },
   {
-    items: [{ label: 'Ayarlar', icon: Settings, disabled: true }]
+    items: [{ href: routes.settings, label: routeLabels.settings, icon: Settings }]
   }
 ];
 

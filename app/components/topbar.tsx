@@ -2,13 +2,16 @@
 
 import { Bell } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
+import { routeLabels, routes } from '@/lib/routes';
 
 const titleMap: Record<string, string> = {
-  '/app/dashboard': 'Dashboard',
-  '/app/single': 'Kâr Senaryosu',
-  '/app/compare': 'Pazaryeri Karşılaştırma',
-  '/app/competition': 'Rekabet Analizi',
-  '/app/competition/product': 'Fiyat Konumu'
+  [routes.dashboard]: routeLabels.dashboard,
+  [routes.analyses.profitScenario]: routeLabels.profitScenario,
+  [routes.analyses.marketplaceComparison]: routeLabels.marketplaceComparison,
+  [routes.analyses.marketAnalysis]: routeLabels.marketAnalysis,
+  [routes.analyses.pricePosition]: routeLabels.pricePosition,
+  [routes.products]: routeLabels.products,
+  [routes.settings]: routeLabels.settings
 };
 
 export function Topbar() {
@@ -28,7 +31,7 @@ export function Topbar() {
           </button>
           <div className="flex items-center gap-2">
             <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">Mock User</span>
-            <button type="button" onClick={() => router.push('/login')} className="btn btn-ghost h-9 px-3 text-sm">
+            <button type="button" onClick={() => router.push(routes.login)} className="btn btn-ghost h-9 px-3 text-sm">
               Logout
             </button>
           </div>

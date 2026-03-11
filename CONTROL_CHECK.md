@@ -11,16 +11,17 @@
 - `app/layout.tsx` içinde `import './globals.css'` olmalı.
 - `app/globals.css` içinde `@tailwind base/components/utilities` ve `.card` tanımı olmalı.
 - `tailwind.config.ts` içinde `./app/**/*` content deseni bulunmalı.
-- `app/(protected)/compare/page.tsx` mevcut olmalı ve compare UI burada yaşamalı.
-- `app/components/sidebar.tsx` içinde compare linki yalnızca `/compare` olmalı (eski app-prefix path kullanılmamalı).
+- `app/(panel)/analyses/marketplace-comparison/page.tsx` mevcut olmalı ve compare UI burada yaşamalı.
+- `lib/routes.ts` içinde `analyses.marketplaceComparison` route'u tanımlı olmalı.
+- `app/components/sidebar.tsx` compare linki için `lib/routes.ts` config'ini kullanmalı.
 - `app/(protected)/products/page.tsx` mevcut olmalı ve products UI burada yaşamalı.
 - `app/components/sidebar.tsx` içinde products linki yalnızca `/products` olmalı (eski app-prefix path kullanılmamalı).
 - `app/components/sidebar.tsx` içinde `/products/upload` ayrı bir sidebar linki olarak bulunmamalı.
 
 ## 2) Smoke Routes (manuel ~1 dk)
 - `/login`: Google butonu görünüyor mu, redirect akışı doğru mu?
-- `/single`: Kampanya checkbox + XOR davranışı çalışıyor mu, not metni görünüyor mu?
-- `/compare`: Kartlar anlık güncelleniyor mu, duplicate marketplace eklenmiyor mu, assistant summary görünüyor mu?
+- `/analyses/profit-scenario`: Kampanya checkbox + XOR davranışı çalışıyor mu, not metni görünüyor mu?
+- `/analyses/marketplace-comparison`: Kartlar anlık güncelleniyor mu, duplicate marketplace eklenmiyor mu, assistant summary görünüyor mu?
 - Stil kontrolü: Sayfa “default HTML” gibi görünüyorsa CSS pipeline kırılmış olabilir; önce `npm run controlcheck` çalıştır.
 
 ## 3) Compare özel senaryolar
@@ -41,4 +42,4 @@
 - Geçerli vaka: `https://www.trendyol.com/sr?q=...`
 - Analiz butonu, URL geçerli ve fiyat > 0 olmadan aktif olmamalı.
 - Aynı URL + aynı mod için refresh sonrası median aynı kalmalı (deterministic).
-- Query param fiyatı inputu doldurmalı: `/competition?price=118.75`
+- Query param fiyatı inputu doldurmalı: `/analyses/market-analysis?price=118.75`

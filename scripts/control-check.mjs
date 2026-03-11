@@ -74,8 +74,9 @@ function runUiGuards() {
   const layoutTsx = readRequiredFile('app/layout.tsx');
   const globalsCss = readRequiredFile('app/globals.css');
   const tailwindConfig = readRequiredFile('tailwind.config.ts');
-  const comparePage = readRequiredFile('app/(panel)/compare/page.tsx');
+  const comparePage = readRequiredFile('app/(panel)/analyses/marketplace-comparison/page.tsx');
   const sidebarTsx = readRequiredFile('app/components/sidebar.tsx');
+  const routesTs = readRequiredFile('lib/routes.ts');
 
   assertMatch(layoutTsx, /import\s+['"]\.\/globals\.css['"];?/, 'app/layout.tsx', "Root layout içinde './globals.css' import'u zorunlu.");
 
@@ -91,9 +92,9 @@ function runUiGuards() {
     "Tailwind content içinde './app/**/*' deseni eksik."
   );
 
-  assertMatch(comparePage, /export\s+default\s+function/, 'app/(panel)/compare/page.tsx', 'Compare page default export eksik.');
-
-  assertMatch(sidebarTsx, /href:\s*['"]\/compare['"]/, 'app/components/sidebar.tsx', "Sidebar compare linki '/compare' olmalı.");
+  assertMatch(comparePage, /export\s+default\s+function/, 'app/(panel)/analyses/marketplace-comparison/page.tsx', 'Marketplace comparison page default export eksik.');
+  assertMatch(routesTs, /marketplaceComparison:\s*['"]\/analyses\/marketplace-comparison['"]/, 'lib/routes.ts', "marketplaceComparison route'u eksik.");
+  assertMatch(sidebarTsx, /routes\.analyses\.marketplaceComparison/, 'app/components/sidebar.tsx', "Sidebar marketplace comparison route config kullanmalı.");
   assertNoMatch(sidebarTsx, /href:\s*['"]\/app\/compare['"]/, 'app/components/sidebar.tsx', "Sidebar içinde eski '/app/compare' linki tespit edildi.");
 
   console.log('[controlcheck] UI guard kontrolleri geçti.');
