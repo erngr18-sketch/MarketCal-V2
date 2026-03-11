@@ -17,6 +17,10 @@ export type AiPanelTone = 'neutral' | 'success' | 'warning' | 'danger';
 export type AiPanelItem = {
   icon: AiPanelIcon;
   text: string;
+  title?: string;
+  reason?: string;
+  action?: string;
+  inlineTitle?: boolean;
   tone?: AiPanelTone;
   emphasis?: boolean;
 };
@@ -49,10 +53,24 @@ export function AiPanel({
         {normalized.map((item, index) => {
           const Icon = iconByName(item.icon);
           const tone = item.tone ?? 'neutral';
+          const hasStructuredContent = item.title || item.reason || item.action;
           return (
             <li key={`${item.text}-${index}`} className="flex items-start gap-2 text-sm">
               <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${toneClass(tone)}`} />
-              <span className={`${item.emphasis ? 'font-medium text-slate-900' : 'text-slate-700'} leading-6`}>{item.text}</span>
+              {hasStructuredContent ? (
+                <div className="space-y-1 leading-6">
+                  {item.title && item.inlineTitle && item.reason ? (
+                    <p className="text-slate-700">
+                      <span className="font-semibold text-slate-900">{item.title}</span> {item.reason}
+                    </p>
+                  ) : null}
+                  {item.title && !(item.inlineTitle && item.reason) ? <p className="font-semibold text-slate-900">{item.title}</p> : null}
+                  {item.reason && !(item.inlineTitle && item.title) ? <p className="text-slate-700">{item.reason}</p> : null}
+                  {item.action ? <p className="text-slate-700">{item.action}</p> : null}
+                </div>
+              ) : (
+                <span className={`${item.emphasis ? 'font-medium text-slate-900' : 'text-slate-700'} block whitespace-pre-line leading-6`}>{item.text}</span>
+              )}
             </li>
           );
         })}

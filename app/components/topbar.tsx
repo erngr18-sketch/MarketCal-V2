@@ -15,7 +15,7 @@ export function Topbar() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const title = pathname.startsWith('/app/competition') ? 'Rekabet Analizi' : (titleMap[pathname] ?? 'Panel');
+  const title = pathname.startsWith('/app/competition') ? 'Rekabet Analizi' : (titleMap[pathname] ?? '');
 
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200/60 bg-white">

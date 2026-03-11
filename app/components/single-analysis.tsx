@@ -38,10 +38,7 @@ export function SingleAnalysis() {
   const isCustomVat = !VAT_PRESETS.includes(values.vatRate as (typeof VAT_PRESETS)[number]);
 
   const result = useMemo(() => calculate(values), [values]);
-  const assistantMessage = useMemo(
-    () => buildAssistant(result.status, values.campaignEnabled),
-    [result.status, values.campaignEnabled]
-  );
+  const assistantMessage = useMemo(() => buildAssistant(result.status), [result.status]);
   const assistantItems = useMemo(() => toSingleAiPanelItems(assistantMessage, result.status), [assistantMessage, result.status]);
 
   const onNumberChange = (key: keyof Omit<SingleInput, 'campaignEnabled'>, raw: string) => {
@@ -166,7 +163,7 @@ export function SingleAnalysis() {
                   key={rate}
                   type="button"
                   onClick={() => onVatPresetSelect(rate)}
-                  className={active ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+                  className={active ? 'badge bg-[#10399c] text-white' : 'badge bg-white text-slate-700'}
                 >
                   %{rate}
                 </button>
@@ -176,7 +173,7 @@ export function SingleAnalysis() {
             <button
               type="button"
               onClick={() => onVatPresetSelect('custom')}
-              className={isCustomVat ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+              className={isCustomVat ? 'badge bg-[#10399c] text-white' : 'badge bg-white text-slate-700'}
             >
               Diğer
             </button>
@@ -246,18 +243,28 @@ export function SingleAnalysis() {
         <AiPanel items={assistantItems} />
 
         <section className="card p-6 lg:flex-1">
-          <p className="text-sm font-medium text-slate-500">Net Kâr</p>
-          <p className="number-display mt-1 text-4xl font-semibold text-slate-900">{formatTry(result.netProfit)}</p>
-          <p className="mt-2 text-sm text-slate-600">Net Satış (KDV Hariç): {formatTry(result.netSales)}</p>
-
-          <div className="mt-4 flex items-center gap-2">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-slate-500">Net Kâr</p>
+              <p className="number-display mt-1 text-4xl font-semibold text-slate-900">{formatTry(result.netProfit)}</p>
+            </div>
             <span className={statusBadgeClass(result.status)}>{statusLabel(result.status)}</span>
-            <span className="text-sm text-slate-600">Marj: %{result.marginPct.toFixed(1)}</span>
           </div>
 
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <p className="text-xs text-slate-500">100 Adet Toplam</p>
-            <p className="number-display text-lg font-semibold text-slate-900">{formatTry(result.netProfit * 100)}</p>
+          <div className="mt-5 space-y-3">
+            <MetricRow label="Net Satış (KDV Hariç)" value={formatTry(result.netSales)} />
+            <MetricRow label="Marj" value={`%${result.marginPct.toFixed(1)}`} />
+            <MetricRow label="100 Adet Toplam" value={formatTry(result.netProfit * 100)} />
+          </div>
+
+          <div className="mt-6 border-t border-slate-200 pt-4">
+            <h3 className="text-sm font-semibold text-slate-900">Tahmini Kâr Hacmi</h3>
+            <div className="mt-3 space-y-2">
+              <MetricRow label="50 adet" value={formatTry(result.netProfit * 50)} compact />
+              <MetricRow label="100 adet" value={formatTry(result.netProfit * 100)} compact />
+              <MetricRow label="250 adet" value={formatTry(result.netProfit * 250)} compact />
+            </div>
+            <p className="mt-3 text-xs text-slate-500">Aynı fiyat ve maliyet varsayımıyla hesaplanır.</p>
           </div>
 
           <p className="mt-4 text-xs text-slate-500">Satış fiyatı KDV dahil kabul edilir. Hesaplar anlık güncellenir.</p>
@@ -273,6 +280,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span>{label}</span>
       {children}
     </label>
+  );
+}
+
+function MetricRow({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
+  return (
+    <div className={`flex items-start justify-between gap-4 ${compact ? '' : 'border-b border-slate-100 pb-3 last:border-b-0 last:pb-0'}`}>
+      <p className="text-sm text-slate-600">{label}</p>
+      <p className={`number-display text-right text-slate-900 ${compact ? 'text-sm font-semibold' : 'text-base font-semibold'}`}>{value}</p>
+    </div>
   );
 }
 
@@ -299,12 +315,12 @@ function calculate(input: SingleInput) {
   };
 }
 
-function buildAssistant(status: Status, campaignEnabled: boolean): string[] {
+function buildAssistant(status: Status): string[] {
   if (status === 'ok') {
     return [
       'Tanı: Senaryo hedef kârı karşılıyor.',
       'Öneri: Reklam ve kargo kalemlerini küçük adımlarla optimize ederek marjı koru.',
-      `Kontrol: ${campaignEnabled ? 'Kampanya açıkken efektif fiyat ve KDV hariç net satış hesabını kontrol et' : 'Satış fiyatının KDV dahil, maliyetlerin gider bazlı işlendiğini doğrula'}.`
+      'Kontrol: Mevcut yapı kârlı görünüyor. Komisyon ve gider kalemlerini düzenli kontrol ederek marjı koru.'
     ];
   }
 
@@ -312,14 +328,14 @@ function buildAssistant(status: Status, campaignEnabled: boolean): string[] {
     return [
       'Tanı: Senaryo pozitif ama hedef kârın altında.',
       'Öneri: İndirim/kupon derinliğini azaltıp kargo ve reklam bütçesini yeniden dengele.',
-      'Kontrol: Komisyon oranının kategoriyle uyumlu olduğunu, satış fiyatının KDV dahil kabul edildiğini ve net satışın KDV hariç hesaplandığını teyit et.'
+      'Kontrol: Marj dar görünüyor. Komisyon, kargo ve reklam giderlerini panelden kontrol ederek küçük sapmaları izle.'
     ];
   }
 
   return [
     'Tanı: Senaryo mevcut parametrelerde zararda.',
     'Öneri: Önce kampanya maliyetini hafiflet, ardından kargo ve reklam kalemlerinde daha sürdürülebilir bir seviye dene.',
-    'Kontrol: Efektif satış fiyatı, KDV hariç net satış ve komisyon hesabını adım adım doğrulayarak zarar kaynağını netleştir.'
+    'Kontrol: Zararın hangi kalemden kaynaklandığını netleştirmek için komisyon, kargo ve reklam değerlerini panelden doğrula.'
   ];
 }
 
@@ -334,8 +350,8 @@ function toSingleAiPanelItems(lines: string[], status: Status): AiPanelItem[] {
 }
 
 function statusLabel(status: Status) {
-  if (status === 'ok') return 'Hedefte';
-  if (status === 'weak') return 'Hedef Altı';
+  if (status === 'ok') return 'Kârda';
+  if (status === 'weak') return 'Sınırda';
   return 'Zarar';
 }
 

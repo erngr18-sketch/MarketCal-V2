@@ -31,7 +31,12 @@ body {
 }
 
 .btn-primary {
-  @apply bg-slate-900 text-white hover:bg-slate-800;
+  background-color: #10399c;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background-color: #0d307f;
 }
 
 .btn-secondary {

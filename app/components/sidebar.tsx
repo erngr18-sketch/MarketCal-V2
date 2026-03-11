@@ -37,13 +37,13 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-full border-b border-slate-200/60 bg-white px-4 py-6 lg:sticky lg:top-0 lg:h-screen lg:w-[280px] lg:border-b-0 lg:border-r">
+    <aside className="flex w-full flex-col border-b border-slate-200/60 bg-white px-4 py-6 lg:sticky lg:top-0 lg:h-screen lg:w-[280px] lg:border-b-0 lg:border-r">
       <div>
         <p className="text-xs uppercase tracking-[0.22em] text-slate-500">MARKETCAL</p>
         <p className="mt-1 text-sm font-medium text-slate-800">Admin Workspace</p>
       </div>
 
-      <nav className="mt-5 space-y-1">
+      <nav className="mt-5 flex-1 space-y-1">
         {items.map((item) => {
           const Icon = item.icon;
           const isCompetitionParent = item.href === '/app/competition';
@@ -89,7 +89,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="mt-6 hidden lg:block">
+      <div className="mt-6 hidden justify-center lg:flex">
         <span className="badge bg-slate-100 text-slate-600">v2.0</span>
       </div>
     </aside>

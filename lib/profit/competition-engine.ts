@@ -29,6 +29,7 @@ export type UrlValidationResult = {
   ok: boolean;
   reason?: string;
   normalizedUrl?: string;
+  sourceLabel?: string;
 };
 
 export type CompetitionOutput = {
@@ -57,29 +58,30 @@ export function validateTrendyolUrl(rawUrl: string): UrlValidationResult {
   try {
     parsed = new URL(trimmed);
   } catch {
-    return { ok: false, reason: 'Geçersiz URL' };
+    return { ok: false, reason: 'Link okunamadı. Geçerli bir kategori linki girin.' };
   }
 
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    return { ok: false, reason: 'URL yalnızca http/https olabilir.' };
+    return { ok: false, reason: 'Link http veya https ile başlamalı.' };
   }
 
   if (!ALLOWED_HOSTS.has(parsed.hostname.toLowerCase())) {
-    return { ok: false, reason: 'Sadece trendyol.com veya www.trendyol.com kabul edilir.' };
+    return { ok: false, reason: 'Şimdilik yalnızca Trendyol kategori linki kullanılabilir.' };
   }
 
   const pathname = parsed.pathname.toLowerCase();
   const full = parsed.toString().toLowerCase();
+  const isSlugCategoryPath = /^\/[^/]+-x-c\d+(\/)?$/.test(pathname);
 
   if (pathname.includes('-p-') || full.includes('-p-')) {
-    return { ok: false, reason: 'Ürün linki değil, kategori/arama linki girin.' };
+    return { ok: false, reason: 'Ürün sayfası yerine kategori linki ekleyin.' };
   }
 
   const isSearchPath = pathname === '/sr' || pathname === '/sr/';
   const isCategoryPath = pathname.startsWith('/butik/liste') || pathname.startsWith('/kategori');
 
-  if (!isSearchPath && !isCategoryPath) {
-    return { ok: false, reason: 'Geçersiz Trendyol kategori/arama linki.' };
+  if (!isSearchPath && !isCategoryPath && !isSlugCategoryPath) {
+    return { ok: false, reason: 'Bu link kategori sayfası gibi görünmüyor.' };
   }
 
   if (isSearchPath) {
@@ -87,12 +89,13 @@ export function validateTrendyolUrl(rawUrl: string): UrlValidationResult {
       const value = parsed.searchParams.get(key);
       return typeof value === 'string' && value.trim().length > 0;
     });
-    if (!hasSearchQuery) return { ok: false, reason: 'Geçersiz arama linki (q/qt/st yok).' };
+    if (!hasSearchQuery) return { ok: false, reason: 'Arama linkinde sorgu bilgisi eksik görünüyor.' };
   }
 
   return {
     ok: true,
-    normalizedUrl: normalizeTrendyolUrl(parsed)
+    normalizedUrl: normalizeTrendyolUrl(parsed),
+    sourceLabel: 'Trendyol'
   };
 }
 
@@ -109,10 +112,10 @@ export function normalizeTrendyolUrl(urlOrRaw: string | URL): string {
 
 export function runCompetition(input: CompetitionInput): CompetitionOutput {
   const safeMyPrice = Math.max(0, round2(input.myPrice));
-  const validation = validateTrendyolUrl(input.url ?? '');
+  const validation = input.source === 'manual' ? { ok: true as const } : validateTrendyolUrl(input.url ?? '');
 
   if (!validation.ok) {
-    throw new Error(validation.reason ?? 'Geçersiz Trendyol URL');
+    throw new Error(validation.reason ?? 'Geçerli bir kategori linki girin.');
   }
 
   const stats =

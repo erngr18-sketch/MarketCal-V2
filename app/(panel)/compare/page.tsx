@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
@@ -206,12 +205,8 @@ export default function ComparePage() {
       <section className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Karşılaştırma</h1>
-          <p className="mt-1 text-sm text-slate-600">Tek ürün senaryosunda pazaryerlerini komisyon, kargo ve kampanya etkileriyle kıyaslayın.</p>
-          <p className="mt-1 text-xs text-slate-500">1) Ürün senaryosunu gir  2) Pazaryerlerini ekle  3) Önerileri uygula</p>
+          <p className="mt-1 text-sm text-slate-600">Tek ürün senaryosunda pazaryerlerini kârlılık açısından karşılaştırın.</p>
         </div>
-        <Link className="btn btn-primary" href={`/app/competition?price=${safePriceForCompetition(globals.salesPrice)}`}>
-          Rekabet Analizine Geç
-        </Link>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
@@ -253,7 +248,7 @@ export default function ComparePage() {
                       key={rate}
                       type="button"
                       onClick={() => onVatPresetSelect(rate)}
-                      className={active ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+                      className={active ? 'badge bg-[#10399c] text-white' : 'badge bg-white text-slate-700'}
                     >
                       %{rate}
                     </button>
@@ -263,7 +258,7 @@ export default function ComparePage() {
                 <button
                   type="button"
                   onClick={() => onVatPresetSelect('custom')}
-                  className={isCustomVat ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+                  className={isCustomVat ? 'badge bg-[#10399c] text-white' : 'badge bg-white text-slate-700'}
                 >
                   Diğer
                 </button>
@@ -415,16 +410,6 @@ export default function ComparePage() {
 
         <aside className="space-y-4 lg:sticky lg:top-6">
           <AiPanel items={assistantItems} />
-
-          <section className="card p-5">
-            <h3 className="card-title">Özet</h3>
-            <div className="mt-3 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-1">
-              <ResultItem label="Toplam Net Kâr" value={formatCurrency(result.summary.totalNetProfit)} />
-              <ResultItem label="Ortalama Net Kâr" value={formatCurrency(result.summary.averageNetProfit)} />
-              <ResultItem label="En Karlı" value={labelByMarketplaceId(result.summary.topMarketplaceId)} />
-              <ResultItem label="En Düşük Net Kâr" value={labelByMarketplaceId(result.summary.worstMarketplaceId)} />
-            </div>
-          </section>
         </aside>
       </div>
     </div>
@@ -481,22 +466,19 @@ function buildAssistantItems({
     ];
   }
 
-  const top = ranked.find((item) => item.rank === 'top') ?? ranked[0];
-  const actions = [...ranked]
-    .filter((item) => item.marketplaceId !== top.marketplaceId)
-    .sort((a, b) => a.output.netProfit - b.output.netProfit)
-    .slice(0, 3)
-    .map((item): AiPanelItem => ({
+  const ordered = [...ranked].sort((a, b) => rankPriority(a.rank) - rankPriority(b.rank) || b.output.netProfit - a.output.netProfit);
+  const items = ordered.map(
+    (item): AiPanelItem => ({
       icon: rankIcon(item.rank),
       tone: rankTone(item.rank),
-      text: `${item.label} (${rankLabel(item.rank)}) — ${buildRecommendation(item, targetProfit)}`
-    }));
+      emphasis: item.rank === 'top' || item.rank === 'loss' || item.rank === 'weak',
+      title: `${item.label} - ${rankHeadline(item.rank)}`,
+      reason: `Neden: ${buildReason(item, targetProfit)}`,
+      action: buildActionText(item, targetProfit),
+      text: `${item.label} - ${rankHeadline(item.rank)}`
+    })
+  );
 
-  const items: AiPanelItem[] = [
-    { icon: 'trendUp', tone: 'success', emphasis: true, text: `${top.label} şu anda en yüksek net kârı üretiyor.` },
-    ...actions,
-    { icon: 'check', tone: 'neutral', text: 'Satış fiyatının KDV dahil, kâr hesaplarının KDV hariç net satış üzerinden yapıldığını ve komisyon oranını panelden teyit et.' }
-  ];
   return items.slice(0, 5);
 }
 
@@ -515,6 +497,52 @@ function rankTone(rank: ProfitRank): AiPanelItem['tone'] {
   if (rank === 'loss') return 'danger';
   if (rank === 'weak') return 'warning';
   return 'success';
+}
+
+function rankHeadline(rank: ProfitRank) {
+  if (rank === 'top') return 'En Karlı Kanal';
+  if (rank === 'weak') return 'Zayıf Karlılık';
+  if (rank === 'loss') return 'Zarar Eden Kanal';
+  return 'Hedefe Yakın';
+}
+
+function rankPriority(rank: ProfitRank) {
+  if (rank === 'top') return 0;
+  if (rank === 'weak') return 1;
+  if (rank === 'loss') return 2;
+  return 3;
+}
+
+function buildReason(
+  row: {
+    label: string;
+    row: CompareCardState;
+    input: CompareRowInput;
+    output: ReturnType<typeof calculateCompare>['rows'][number];
+  },
+  targetProfit: number
+) {
+  const profitText = `${formatCurrency(row.output.netProfit)} net kâr`;
+
+  if (row.row.campaignEnabled && (row.row.discountRate > 0 || row.row.couponValue > 0)) {
+    const campaignText =
+      row.row.discountRate > 0 ? `aktif ${row.row.discountRate}% indirim` : `aktif ${formatCurrency(row.row.couponValue)} kupon`;
+    return `${campaignText} marjı baskılıyor; sonuç ${profitText}.`;
+  }
+
+  if (row.output.netProfit <= 0) {
+    return `Komisyon, kargo ve reklam toplamı satıştan kalan tutarı aşıyor; sonuç ${profitText}.`;
+  }
+
+  if (row.output.netProfit < targetProfit) {
+    return `Hedef kâr ${formatCurrency(targetProfit)} seviyesinin altında kalıyor; sonuç ${profitText}.`;
+  }
+
+  if (row.row.commissionRate >= 20) {
+    return `Yüksek komisyona rağmen marj pozitif kalıyor; sonuç ${profitText}.`;
+  }
+
+  return `Maliyetler kontrol altında ve kanal hedef kârı destekliyor; sonuç ${profitText}.`;
 }
 
 function buildRecommendation(
@@ -539,6 +567,18 @@ function buildRecommendation(
   const requiredDelta = commissionFactor > 0 ? Math.ceil(gap / commissionFactor) : Math.ceil(gap);
   const safeDelta = Math.max(5, requiredDelta);
   return `${row.label} tarafında satış fiyatını yaklaşık ${safeDelta} TL artırmak kârlılığı dengeleyebilir.`;
+}
+
+function buildActionText(
+  row: {
+    label: string;
+    row: CompareCardState;
+    input: CompareRowInput;
+    output: ReturnType<typeof calculateCompare>['rows'][number];
+  },
+  targetProfit: number
+) {
+  return `Aksiyon: ${buildRecommendation(row, targetProfit)}`;
 }
 
 function resolveProfitRank({
@@ -601,11 +641,6 @@ function statusCardClass(rank: ProfitRank) {
 
 function labelByMarketplaceId(id: string) {
   return MARKETPLACES.find((marketplace) => marketplace.id === id)?.label ?? '-';
-}
-
-function safePriceForCompetition(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return 120;
-  return Math.max(0, Math.round(value * 100) / 100);
 }
 
 function clamp(value: number, min: number, max: number) {
