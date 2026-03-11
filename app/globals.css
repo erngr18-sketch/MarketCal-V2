@@ -31,7 +31,7 @@ body {
 }
 
 .btn-primary {
-  @apply bg-slate-900 text-white hover:bg-slate-800;
+  @apply bg-[#1d3366] text-white hover:bg-[#244181];
 }
 
 .btn-secondary {

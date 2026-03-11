@@ -1,9 +1,10 @@
 'use client';
 
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { AiPanelItem } from '@/app/components/ai-panel';
 import { InfoNote, MetricCard } from '@/app/components/ui/clarity';
+import { Iridescence } from '@/app/components/ui/iridescence';
 import { calculateCompare, formatCurrency, type CompareRowInput } from '@/lib/profit/compare-engine';
 
 const MARKETPLACES = [
@@ -36,9 +37,9 @@ type CompareCardState = {
 };
 
 const INITIAL_GLOBALS: GlobalValues = {
-  salesPrice: 120,
-  costPrice: 60,
-  targetProfit: 15,
+  salesPrice: 0,
+  costPrice: 0,
+  targetProfit: 0,
   defaultAdvertisingCost: 10,
   vatRate: 20
 };
@@ -50,12 +51,16 @@ export default function ComparePage() {
   const [rows, setRows] = useState<CompareCardState[]>([]);
   const [hasResult, setHasResult] = useState(false);
   const [isEditingScenario, setIsEditingScenario] = useState(true);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
+  const customVatInputRef = useRef<HTMLInputElement | null>(null);
   const isCustomVat = !VAT_PRESETS.includes(globals.vatRate as (typeof VAT_PRESETS)[number]);
 
   const selectedMarketplaceIds = rows.map((row) => row.marketplaceId);
   const hasReachedMarketplaceLimit = rows.length >= 3;
-  const canStartAnalysis = rows.length > 0;
+  const hasMarketplaceSelection = rows.length > 0;
+  const hasScenarioInputs = globals.salesPrice > 0 && globals.costPrice > 0 && globals.targetProfit > 0;
+  const canStartAnalysis = hasMarketplaceSelection && hasScenarioInputs;
 
   const engineRows: CompareRowInput[] = useMemo(
     () =>
@@ -106,13 +111,6 @@ export default function ComparePage() {
     return sorted[0]?.row.marketplaceId ?? '';
   }, [rankedRows]);
 
-  const riskRow = useMemo(() => {
-    const sorted = [...rankedRows].sort((a, b) => a.output.netProfit - b.output.netProfit);
-    return sorted[0] ?? null;
-  }, [rankedRows]);
-
-  const topRow = rankedRows.find((item) => item.row.marketplaceId === topMarketplaceId) ?? null;
-
   const aiSummaryItems = useMemo(
     () =>
       buildAiSummaryItems({
@@ -122,6 +120,12 @@ export default function ComparePage() {
       }),
     [globals.targetProfit, rankedRows, topMarketplaceId]
   );
+
+  useEffect(() => {
+    if (!isCustomVat) return;
+    customVatInputRef.current?.focus();
+    customVatInputRef.current?.select();
+  }, [isCustomVat]);
 
   const onGlobalChange = (key: keyof GlobalValues, raw: string) => {
     const next = Number(raw);
@@ -200,28 +204,36 @@ export default function ComparePage() {
   };
 
   const startAnalysis = () => {
-    if (!canStartAnalysis) return;
-    setHasResult(true);
-    setIsEditingScenario(false);
+    if (!canStartAnalysis || isAnalyzing) return;
+    setIsAnalyzing(true);
+    window.setTimeout(() => {
+      setHasResult(true);
+      setIsEditingScenario(false);
+      setIsAnalyzing(false);
+    }, 900);
   };
 
-  const resultMode = hasResult && !isEditingScenario;
+  const resultMode = hasResult && !isEditingScenario && !isAnalyzing;
+  const ctaState = resolveCompareCtaState({
+    hasMarketplaceSelection,
+    hasScenarioInputs,
+    isAnalyzing
+  });
 
   return (
     <div className="space-y-6">
-      <section>
+      <section className="space-y-4">
+        <p className="text-xs font-medium tracking-[0.08em] text-slate-500">Rekabet Analizi / Karşılaştırma</p>
         <h1 className="text-2xl font-semibold text-slate-900">Karşılaştırma</h1>
-        <p className="mt-1 text-sm text-slate-600">Hangi pazaryerinde daha kârlı olduğunu görmek için senaryonu oluştur.</p>
-        <p className="mt-1 text-xs text-slate-500">Önce pazaryerlerini seç, sonra senaryonu gir.</p>
+        <p className="text-sm text-slate-600">Pazaryerleri arasında kârlılığı karşılaştırmak için senaryonu oluştur.</p>
       </section>
 
       {!hasResult || isEditingScenario ? (
-        <section className="card p-6">
-          <div className="space-y-6">
+        <section className="card p-5">
+          <div className="space-y-5">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Kurulum</p>
-              <h2 className="mt-1 text-lg font-semibold text-slate-900">Pazaryeri seçimi</h2>
-              <p className="mt-1 text-sm text-slate-600">En fazla 3 pazaryeri seçebilirsin.</p>
+              <h2 className="text-lg font-semibold text-slate-900">Pazaryeri seçimi</h2>
+              <p className="mt-1 text-sm text-slate-600">Bir veya daha fazla pazaryeri seçebilirsin. En fazla 3 seçim.</p>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -236,10 +248,10 @@ export default function ComparePage() {
                     disabled={disabled}
                     className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
                       selected
-                        ? 'border-slate-900 bg-slate-900 text-white'
+                        ? 'border-[#1d3366] bg-[#1d3366] text-white focus-visible:ring-2 focus-visible:ring-[#1d3366]/20'
                         : disabled
                           ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
-                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-[#1d3366]/35 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-[#1d3366]/15'
                     }`}
                   >
                     {marketplace.label}
@@ -263,9 +275,9 @@ export default function ComparePage() {
               </Field>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5">
               <p className="text-sm font-medium text-slate-700">KDV Oranı (%)</p>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap items-center gap-2">
                 {VAT_PRESETS.map((rate) => {
                   const active = globals.vatRate === rate;
                   return (
@@ -273,7 +285,7 @@ export default function ComparePage() {
                       key={rate}
                       type="button"
                       onClick={() => onVatPresetSelect(rate)}
-                      className={active ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+                      className={active ? 'badge bg-[#1d3366] text-white focus-visible:ring-2 focus-visible:ring-[#1d3366]/20' : 'badge bg-white text-slate-700 focus-visible:ring-2 focus-visible:ring-[#1d3366]/15'}
                     >
                       %{rate}
                     </button>
@@ -282,26 +294,47 @@ export default function ComparePage() {
                 <button
                   type="button"
                   onClick={() => onVatPresetSelect('custom')}
-                  className={isCustomVat ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+                  className={isCustomVat ? 'badge bg-[#1d3366] text-white focus-visible:ring-2 focus-visible:ring-[#1d3366]/20' : 'badge bg-white text-slate-700 focus-visible:ring-2 focus-visible:ring-[#1d3366]/15'}
                 >
                   Diğer
                 </button>
-                {isCustomVat ? (
-                  <label className="w-24 text-sm text-slate-700">
-                    <span className="sr-only">Özel KDV oranı</span>
-                    <input type="number" min={0} step={0.1} className="input" value={globals.vatRate} onChange={(e) => onGlobalChange('vatRate', e.target.value)} />
-                  </label>
-                ) : null}
+                <div className="w-[84px]">
+                  {isCustomVat ? (
+                    <label className="block text-sm text-slate-700">
+                      <span className="sr-only">Özel KDV oranı</span>
+                      <input
+                        ref={customVatInputRef}
+                        type="number"
+                        min={0}
+                        step={0.1}
+                        className="input h-9 w-[84px] rounded-full px-3 text-center"
+                        value={globals.vatRate}
+                        onChange={(e) => onGlobalChange('vatRate', e.target.value)}
+                      />
+                    </label>
+                  ) : (
+                    <div className="h-9 w-[84px]" aria-hidden="true" />
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-slate-600">
-                {rows.length > 0 ? `Seçilen pazaryerleri: ${rows.map((row) => labelByMarketplaceId(row.marketplaceId)).join(' • ')}` : 'Analiz için en az bir pazaryeri seç.'}
-              </p>
-              <button type="button" className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" onClick={startAnalysis} disabled={!canStartAnalysis}>
-                {hasResult ? 'Karşılaştırmayı Güncelle' : 'Karşılaştırmayı Başlat'}
-              </button>
+            <div className="flex justify-center pt-3">
+              <div className="w-full max-w-[420px] space-y-2">
+                <button
+                  type="button"
+                  className={`btn h-11 w-full justify-center rounded-xl px-6 text-[15px] font-medium tracking-[0.02em] transition disabled:cursor-not-allowed ${
+                    ctaState.enabled
+                      ? 'bg-[#1d3366] text-white hover:bg-[#244181] active:translate-y-px'
+                      : 'bg-slate-200 text-slate-600'
+                  }`}
+                  onClick={startAnalysis}
+                  disabled={!ctaState.enabled}
+                >
+                  <span>{ctaState.label}</span>
+                </button>
+                {ctaState.helper ? <p className="text-center text-xs text-slate-500">{ctaState.helper}</p> : null}
+              </div>
             </div>
           </div>
         </section>
@@ -310,35 +343,48 @@ export default function ComparePage() {
       {hasResult ? (
         <>
           {!isEditingScenario ? (
-            <section className="card p-5">
+            <section className="card p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Senaryo Özeti</p>
-                  <h2 className="mt-1 text-lg font-semibold text-slate-900">{rows.map((row) => labelByMarketplaceId(row.marketplaceId)).join(' • ')}</h2>
-                  <p className="mt-1 text-sm text-slate-600">Seçilen pazaryerleri ve temel ürün senaryosu sabitlendi.</p>
+                  <p className="mt-1 text-sm font-medium text-slate-900">{rows.map((row) => labelByMarketplaceId(row.marketplaceId)).join(' • ')}</p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Satış {formatCurrency(globals.salesPrice)} • Maliyet {formatCurrency(globals.costPrice)} • Hedef Kâr {formatCurrency(globals.targetProfit)} • Reklam {formatCurrency(globals.defaultAdvertisingCost)} • KDV %{globals.vatRate}
+                  </p>
                 </div>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsEditingScenario(true)}>
+                <button type="button" className="btn h-10 rounded-xl border border-[#1d3366]/20 bg-[#1d3366] px-4 text-sm font-medium text-white hover:bg-[#244181]" onClick={() => setIsEditingScenario(true)}>
                   Senaryoyu Düzenle
                 </button>
-              </div>
-
-              <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-                <MetricCard label="Satış fiyatı" value={formatCurrency(globals.salesPrice)} />
-                <MetricCard label="Maliyet" value={formatCurrency(globals.costPrice)} />
-                <MetricCard label="Hedef kâr" value={formatCurrency(globals.targetProfit)} />
-                <MetricCard label="Varsayılan reklam" value={formatCurrency(globals.defaultAdvertisingCost)} />
-                <MetricCard label="KDV" value={`%${globals.vatRate}`} />
               </div>
             </section>
           ) : null}
 
-          <AiPanel
-            title="AI Karşılaştırma Özeti"
-            disclaimer="Bu bölüm yorumdur. Kesin hesaplanan karşılaştırma verileri kartların içinde gösterilir."
-            items={aiSummaryItems}
-          />
+          {resultMode ? (
+            <section className="relative overflow-hidden rounded-[28px] border border-[#dce5f8] shadow-sm">
+              <div className="absolute inset-0">
+                <Iridescence className="opacity-80" color={[0.16, 0.28, 0.56]} speed={0.38} amplitude={0.06} />
+                <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.76),rgba(248,250,252,0.48),rgba(255,255,255,0.64))]" />
+              </div>
 
-          <section className="space-y-4">
+              <div className="relative space-y-4 p-6">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#27447f]">AI Karşılaştırma Özeti</p>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-800">Kesin hesaplanan karşılaştırma verileri kartların içinde gösterilir. Bu alan kısa yönlendirme verir.</p>
+                </div>
+
+                <ul className="space-y-3">
+                  {aiSummaryItems.map((item, index) => (
+                    <li key={`${item.text}-${index}`} className="flex items-start gap-3 rounded-2xl bg-white/28 px-3 py-3 backdrop-blur-[1px]">
+                      <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${summaryDotClass(item.tone)}`} />
+                      <span className={`text-sm leading-6 ${item.emphasis ? 'font-semibold text-slate-950' : 'text-slate-900'}`}>{item.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+          ) : null}
+
+          {resultMode ? <section className="space-y-4">
             {rankedRows.map(({ row, output }) => {
               const rank = resolveProfitRank({
                 marketplaceId: row.marketplaceId,
@@ -452,13 +498,15 @@ export default function ComparePage() {
                 </article>
               );
             })}
-          </section>
+          </section> : null}
 
-          <InfoNote
-            label="Kontrol notu"
-            text="Satış fiyatı KDV dahil kabul edilir. Net satış ve net kâr hesapları KDV hariç baz alınır."
-            tone="warning"
-          />
+          {resultMode ? (
+            <InfoNote
+              label="Kontrol notu"
+              text="Satış fiyatı KDV dahil kabul edilir. Net satış ve net kâr hesapları KDV hariç baz alınır."
+              tone="warning"
+            />
+          ) : null}
         </>
       ) : null}
     </div>
@@ -569,6 +617,53 @@ function RankBadge({ rank }: { rank: ProfitRank }) {
   if (rank === 'profit') return <span className="badge bg-sky-100 text-sky-700">Hedefe Yakın</span>;
   if (rank === 'weak') return <span className="badge bg-amber-100 text-amber-700">Zayıf Karlılık</span>;
   return <span className="badge bg-rose-100 text-rose-700">Zarar</span>;
+}
+
+function summaryDotClass(tone: 'neutral' | 'success' | 'warning' | 'danger' | undefined) {
+  if (tone === 'success') return 'bg-emerald-500';
+  if (tone === 'warning') return 'bg-amber-500';
+  if (tone === 'danger') return 'bg-rose-500';
+  return 'bg-[#1d3366]';
+}
+
+function resolveCompareCtaState({
+  hasMarketplaceSelection,
+  hasScenarioInputs,
+  isAnalyzing
+}: {
+  hasMarketplaceSelection: boolean;
+  hasScenarioInputs: boolean;
+  isAnalyzing: boolean;
+}) {
+  if (isAnalyzing) {
+    return {
+      label: 'Analiz Ediliyor...',
+      helper: '',
+      enabled: false
+    };
+  }
+
+  if (!hasMarketplaceSelection) {
+    return {
+      label: 'Pazaryeri seçimi bekleniyor',
+      helper: 'Karşılaştırma için en az 1 pazaryeri seç.',
+      enabled: false
+    };
+  }
+
+  if (!hasScenarioInputs) {
+    return {
+      label: 'Senaryo bilgileri eksik',
+      helper: 'Satış fiyatı, maliyet ve hedef kâr alanlarını kontrol et.',
+      enabled: false
+    };
+  }
+
+  return {
+    label: 'Analizi Başlat',
+    helper: '',
+    enabled: true
+  };
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

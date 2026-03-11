@@ -15,12 +15,12 @@ export function Topbar() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const title = pathname.startsWith('/app/competition') ? 'Rekabet Analizi' : (titleMap[pathname] ?? 'Panel');
+  const title = pathname.startsWith('/app/competition') ? 'Rekabet Analizi' : (titleMap[pathname] ?? '');
 
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200/60 bg-white">
       <div className="layout-shell mx-auto flex h-16 w-full max-w-[1200px] items-center justify-between px-6 lg:px-8">
-        <h1 className="text-base font-semibold text-slate-900">{title}</h1>
+        <div className="flex flex-1 items-center">{title ? <h1 className="text-base font-semibold text-slate-900">{title}</h1> : null}</div>
 
         <div className="flex items-center gap-2">
           <button type="button" className="btn btn-secondary h-9 w-9 p-0" aria-label="Bildirimler">

@@ -97,10 +97,10 @@ export default function CompetitionProductPage() {
 
   return (
     <div className="space-y-6">
-      <section>
+      <section className="space-y-4">
+        <p className="text-xs font-medium tracking-[0.08em] text-slate-500">Rekabet Analizi / Ürün Bazlı</p>
         <h1 className="text-2xl font-semibold text-slate-900">Rekabet Analizi — Ürün Bazlı</h1>
-        <p className="mt-1 text-sm text-slate-600">Trendyol sonuçlarına göre fiyat bandını ve konumunu gör.</p>
-        <p className="mt-1 text-xs text-slate-500">Linki gir → senaryonu tamamla → analizi başlat</p>
+        <p className="text-sm text-slate-600">Trendyol sonuçlarına göre fiyat bandını ve ürün konumunu gör.</p>
       </section>
 
       <DecisionHero
@@ -184,7 +184,7 @@ export default function CompetitionProductPage() {
                       key={rate}
                       type="button"
                       onClick={() => setForm((prev) => ({ ...prev, vatRate: rate }))}
-                      className={active ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+                      className={active ? 'badge bg-[#1d3366] text-white' : 'badge bg-white text-slate-700'}
                     >
                       %{rate}
                     </button>
@@ -194,7 +194,7 @@ export default function CompetitionProductPage() {
                 <button
                   type="button"
                   onClick={() => setForm((prev) => ({ ...prev, vatRate: isCustomVat ? prev.vatRate : '20' }))}
-                  className={isCustomVat ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+                  className={isCustomVat ? 'badge bg-[#1d3366] text-white' : 'badge bg-white text-slate-700'}
                 >
                   Diğer
                 </button>

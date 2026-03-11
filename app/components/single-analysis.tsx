@@ -103,6 +103,12 @@ export function SingleAnalysis() {
 
   return (
     <div className="space-y-6">
+      <section className="space-y-4">
+        <p className="text-xs font-medium tracking-[0.08em] text-slate-500">Kâr Analizi / Tek Ürün</p>
+        <h1 className="text-2xl font-semibold text-slate-900">Tek Ürün Analizi</h1>
+        <p className="text-sm text-slate-600">Ürün senaryosunda net kârı ve hedef kâr durumunu hızlıca gör.</p>
+      </section>
+
       <DecisionHero
         eyebrow="Ana karar"
         title={decisionTitle}
@@ -120,7 +126,7 @@ export function SingleAnalysis() {
         <section className="card p-6">
           <div className="card-header">
             <h2 className="card-title">Ürün Senaryosu</h2>
-            <p className="card-subtitle">Temel maliyetleri ve kampanya etkisini gir, sonuçlar anlık güncellensin.</p>
+            <p className="card-subtitle">Temel maliyetleri ve kampanya etkisini gir.</p>
           </div>
 
         <div className="grid gap-4 md:grid-cols-2">
@@ -189,7 +195,7 @@ export function SingleAnalysis() {
                   key={rate}
                   type="button"
                   onClick={() => onVatPresetSelect(rate)}
-                  className={active ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+                  className={active ? 'badge bg-[#1d3366] text-white' : 'badge bg-white text-slate-700'}
                 >
                   %{rate}
                 </button>
@@ -199,7 +205,7 @@ export function SingleAnalysis() {
             <button
               type="button"
               onClick={() => onVatPresetSelect('custom')}
-              className={isCustomVat ? 'badge bg-slate-900 text-white' : 'badge bg-white text-slate-700'}
+              className={isCustomVat ? 'badge bg-[#1d3366] text-white' : 'badge bg-white text-slate-700'}
             >
               Diğer
             </button>
