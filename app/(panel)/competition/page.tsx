@@ -301,7 +301,7 @@ export default function CompetitionPage() {
     <div className="space-y-6">
       <section className="space-y-1.5">
         <div className="space-y-1.5">
-          <h1 className="text-2xl font-semibold text-slate-900">Fiyat Konumu</h1>
+          <h1 className="text-2xl font-semibold text-slate-900">Rekabet Analizi</h1>
           <p className="text-sm text-slate-600">Kategori veya arama sonucundaki fiyat seviyeni pazardaki konumuna göre değerlendir.</p>
         </div>
       </section>
@@ -499,7 +499,7 @@ export default function CompetitionPage() {
         <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
           <AiPanel
             items={aiItems}
-            title="AI Yorum"
+            title="AI Analiz"
             disclaimer="Not: Bu analiz kategori fiyat bandını simüle eder; gerçek sonuçlar kampanya ve görünürlüğe göre değişebilir."
           />
 
@@ -555,7 +555,7 @@ export default function CompetitionPage() {
                 <div className="mt-5 border-t border-slate-200 pt-4">
                   <div className="flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-indigo-500" />
-                    <p className="text-sm font-semibold text-slate-900">AI Yorum</p>
+                    <p className="text-sm font-semibold text-slate-900">AI Analiz</p>
                   </div>
                   <p className="mt-2 text-sm text-slate-600">{buildMarketPositionComment(analysisSnapshot.result)}</p>
                 </div>

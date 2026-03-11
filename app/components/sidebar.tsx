@@ -1,6 +1,6 @@
 'use client';
 
-import { LayoutDashboard, BarChart3, Scale, TrendingUp } from 'lucide-react';
+import { Calculator, ChartLine, LayoutDashboard, Package, Scale, Settings, Target } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import clsx from 'clsx';
@@ -9,27 +9,42 @@ import type { LucideIcon } from 'lucide-react';
 type SidebarChildItem = {
   href: string;
   label: string;
+  icon: LucideIcon;
 };
 
 type SidebarItem = {
-  href: string;
+  href?: string;
   label: string;
   icon: LucideIcon;
   children?: SidebarChildItem[];
+  disabled?: boolean;
 };
 
-const items: SidebarItem[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/single', label: 'Tek Ürün Analizi', icon: BarChart3 },
-  { href: '/compare', label: 'Karşılaştırma', icon: Scale },
+type SidebarGroup = {
+  label?: string;
+  icon?: LucideIcon;
+  items: SidebarItem[];
+};
+
+const groups: SidebarGroup[] = [
   {
-    href: '/competition',
-    label: 'Rekabet Analizi',
-    icon: TrendingUp,
-    children: [
-      { href: '/competition', label: 'Fiyat Konumu' },
-      { href: '/competition/product', label: 'Ürün Bazlı' }
+    items: [{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }]
+  },
+  {
+    label: 'Analizler',
+    icon: ChartLine,
+    items: [
+      { href: '/single', label: 'Kâr Senaryosu', icon: Calculator },
+      { href: '/compare', label: 'Pazaryeri Karşılaştırma', icon: Scale },
+      { href: '/competition', label: 'Rekabet Analizi', icon: ChartLine },
+      { href: '/competition/product', label: 'Fiyat Konumu', icon: Target }
     ]
+  },
+  {
+    items: [{ label: 'Ürünler', icon: Package, disabled: true }]
+  },
+  {
+    items: [{ label: 'Ayarlar', icon: Settings, disabled: true }]
   }
 ];
 
@@ -43,50 +58,49 @@ export function Sidebar() {
         <p className="mt-1 text-sm font-medium text-slate-800">Admin Workspace</p>
       </div>
 
-      <nav className="mt-5 flex-1 space-y-1">
-        {items.map((item) => {
-          const Icon = item.icon;
-          const isCompetitionParent = item.href === '/app/competition';
-          const active = isCompetitionParent ? pathname.startsWith('/app/competition') : pathname === item.href;
-          return (
-            <div key={item.href}>
-              <Link
-                href={item.href}
-                className={clsx(
-                  'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition',
-                  active
-                    ? 'bg-slate-100 font-semibold text-slate-900'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                )}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                <span className="whitespace-nowrap">{item.label}</span>
-              </Link>
+      <nav className="mt-5 flex-1 space-y-4">
+        {groups.map((group, groupIndex) => (
+          <div key={group.label ?? `group-${groupIndex}`} className="space-y-1">
+            {group.label ? (
+              <div className="flex items-center gap-2 px-3 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
+                {group.icon ? <group.icon className="h-3.5 w-3.5 shrink-0" /> : null}
+                <span>{group.label}</span>
+              </div>
+            ) : null}
 
-              {item.children ? (
-                <div className="mt-1 space-y-1">
-                  {item.children.map((child) => {
-                    const childActive = pathname === child.href;
-                    return (
-                      <Link
-                        key={child.href}
-                        href={child.href}
-                        className={clsx(
-                          'ml-6 block rounded-lg px-3 py-1.5 text-xs transition',
-                          childActive
-                            ? 'bg-slate-100 font-semibold text-slate-900'
-                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                        )}
-                      >
-                        {child.label}
-                      </Link>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
+            {group.items.map((item) => {
+              const Icon = item.icon;
+              const active = item.href ? pathname === item.href : false;
+
+              if (item.disabled || !item.href) {
+                return (
+                  <div key={item.label} className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-slate-400">
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="whitespace-nowrap">{item.label}</span>
+                  </div>
+                );
+              }
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={clsx(
+                    group.label
+                      ? 'ml-5 flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition'
+                      : 'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition',
+                    active
+                      ? 'bg-slate-100 font-semibold text-slate-900'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  )}
+                >
+                  {group.label ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current/60" /> : <Icon className="h-4 w-4 shrink-0" />}
+                  <span className="whitespace-nowrap">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       <div className="mt-6 hidden justify-center lg:flex">

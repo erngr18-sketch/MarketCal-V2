@@ -94,7 +94,6 @@ export function SingleAnalysis() {
       <section className="card p-6">
         <div className="card-header">
           <h2 className="card-title">Ürün Senaryosu</h2>
-          <p className="card-subtitle">Temel maliyetleri ve kampanya etkisini gir, sonuçlar anlık güncellensin.</p>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">

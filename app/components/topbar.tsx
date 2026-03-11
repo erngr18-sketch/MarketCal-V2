@@ -5,17 +5,17 @@ import { usePathname, useRouter } from 'next/navigation';
 
 const titleMap: Record<string, string> = {
   '/app/dashboard': 'Dashboard',
-  '/app/single': 'Tek Ürün Analizi',
-  '/app/compare': 'Karşılaştırma',
+  '/app/single': 'Kâr Senaryosu',
+  '/app/compare': 'Pazaryeri Karşılaştırma',
   '/app/competition': 'Rekabet Analizi',
-  '/app/competition/product': 'Rekabet Analizi'
+  '/app/competition/product': 'Fiyat Konumu'
 };
 
 export function Topbar() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const title = pathname.startsWith('/app/competition') ? 'Rekabet Analizi' : (titleMap[pathname] ?? '');
+  const title = titleMap[pathname] ?? '';
 
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200/60 bg-white">

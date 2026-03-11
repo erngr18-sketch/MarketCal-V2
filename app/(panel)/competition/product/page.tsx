@@ -1,5 +1,6 @@
 'use client';
 
+import { Sparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
 
@@ -9,8 +10,10 @@ type ProductFormState = {
   mode: ProductMode;
   salesPrice: string;
   costPrice: string;
-  targetProfit: string;
   commissionRate: string;
+  shippingCost: string;
+  advertisingCost: string;
+  targetProfit: string;
   productUrl: string;
 };
 
@@ -26,21 +29,45 @@ type ProductAnalysisResult = {
   aiLines: string[];
 };
 
+type ProductAnalysisSnapshot = {
+  analysis: ProductAnalysisResult;
+  parsed: ReturnType<typeof parseProductInputs>;
+};
+
 const INITIAL_STATE: ProductFormState = {
   mode: 'best_sellers',
   salesPrice: '',
   costPrice: '',
-  targetProfit: '15',
   commissionRate: '20',
+  shippingCost: '0',
+  advertisingCost: '0',
+  targetProfit: '15',
   productUrl: ''
 };
 
 export default function CompetitionProductPage() {
   const [form, setForm] = useState<ProductFormState>(INITIAL_STATE);
   const [analysis, setAnalysis] = useState<ProductAnalysisResult | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [lastAnalyzedKey, setLastAnalyzedKey] = useState<string | null>(null);
+  const [analysisSnapshot, setAnalysisSnapshot] = useState<ProductAnalysisSnapshot | null>(null);
 
   const linkValidation = useMemo(() => validateTrendyolProductUrl(form.productUrl), [form.productUrl]);
   const parsed = useMemo(() => parseProductInputs(form), [form]);
+  const analysisKey = useMemo(
+    () =>
+      JSON.stringify({
+        mode: form.mode,
+        salesPrice: parsed.salesPrice,
+        costPrice: parsed.costPrice,
+        commissionRate: parsed.commissionRate,
+        shippingCost: parsed.shippingCost,
+        advertisingCost: parsed.advertisingCost,
+        targetProfit: parsed.targetProfit,
+        productUrl: form.productUrl.trim()
+      }),
+    [form.mode, form.productUrl, parsed.advertisingCost, parsed.commissionRate, parsed.costPrice, parsed.salesPrice, parsed.shippingCost, parsed.targetProfit]
+  );
 
   const canAnalyze =
     form.productUrl.trim().length > 0 &&
@@ -49,46 +76,109 @@ export default function CompetitionProductPage() {
     parsed.costPrice > 0 &&
     parsed.targetProfit >= 0 &&
     parsed.commissionValid;
+  const hasFreshResult = analysis !== null && lastAnalyzedKey === analysisKey;
+  const scenarioReady = parsed.salesPrice > 0 && parsed.costPrice > 0 && parsed.targetProfit >= 0 && parsed.commissionValid;
+  const linkReady = form.productUrl.trim().length > 0 && linkValidation.ok;
 
-  const onAnalyze = () => {
-    if (!canAnalyze) return;
+  const ctaState = useMemo(() => {
+    if (isAnalyzing) {
+      return { label: 'Analiz Ediliyor...', helper: '', disabled: true };
+    }
 
-    const fakePrices = generateFakeCompetitorPrices(`${form.productUrl.trim()}|${form.mode}`);
-    const stats = computeStats(fakePrices);
-    const percentile = Math.round(positionPercent(parsed.salesPrice, stats.min, stats.max));
-    const bandLabel = parsed.salesPrice < stats.lowerQuartile ? 'Ucuz Konum' : parsed.salesPrice > stats.upperQuartile ? 'Pahalı Konum' : 'Dengeli Konum';
+    if (!linkReady && !scenarioReady) {
+      return {
+        label: 'Senaryo bilgileri bekleniyor',
+        helper: 'Ürün linki ile fiyat, maliyet ve temel gider alanlarını tamamlayın.',
+        disabled: true
+      };
+    }
 
-    const aiLines = buildProductAiLines({
-      myPrice: parsed.salesPrice,
-      targetProfit: parsed.targetProfit,
-      costPrice: parsed.costPrice,
-      commissionRate: parsed.commissionRate,
-      stats,
-      bandLabel
-    });
+    if (!linkReady) {
+      return {
+        label: 'Link tanımı bekleniyor',
+        helper: form.productUrl.trim() ? 'Geçerli bir ürün linki girin.' : 'Ürün linki ekleyin.',
+        disabled: true
+      };
+    }
 
-    setAnalysis({
-      min: stats.min,
-      max: stats.max,
-      lowerQuartile: stats.lowerQuartile,
-      median: stats.median,
-      upperQuartile: stats.upperQuartile,
-      myPrice: parsed.salesPrice,
-      percentile,
-      bandLabel,
-      aiLines
-    });
+    if (!scenarioReady) {
+      return {
+        label: 'Senaryo bilgileri bekleniyor',
+        helper: 'Fiyat, maliyet, komisyon ve temel gider alanlarını tamamlayın.',
+        disabled: true
+      };
+    }
+
+    if (hasFreshResult) {
+      return {
+        label: 'Sonuçlar güncel',
+        helper: '',
+        disabled: true
+      };
+    }
+
+    return { label: 'Analizi Başlat', helper: '', disabled: false };
+  }, [form.productUrl, hasFreshResult, isAnalyzing, linkReady, scenarioReady]);
+
+  const productAiItems = useMemo(() => buildProductAiItems({ snapshot: analysisSnapshot }), [analysisSnapshot]);
+
+  const onAnalyze = async () => {
+    if (isAnalyzing || !canAnalyze) return;
+
+    setIsAnalyzing(true);
+    try {
+      const [nextAnalysis] = await Promise.all([
+        Promise.resolve().then(() => {
+          const fakePrices = generateFakeCompetitorPrices(`${form.productUrl.trim()}|${form.mode}`);
+          const stats = computeStats(fakePrices);
+          const percentile = Math.round(positionPercent(parsed.salesPrice, stats.min, stats.max));
+          const bandLabel = parsed.salesPrice < stats.lowerQuartile ? 'Ucuz Konum' : parsed.salesPrice > stats.upperQuartile ? 'Pahalı Konum' : 'Dengeli Konum';
+
+          const aiLines = buildProductAiLines({
+            myPrice: parsed.salesPrice,
+            targetProfit: parsed.targetProfit,
+            costPrice: parsed.costPrice,
+            commissionRate: parsed.commissionRate,
+            shippingCost: parsed.shippingCost,
+            advertisingCost: parsed.advertisingCost,
+            stats,
+            bandLabel
+          });
+
+          return {
+            min: stats.min,
+            max: stats.max,
+            lowerQuartile: stats.lowerQuartile,
+            median: stats.median,
+            upperQuartile: stats.upperQuartile,
+            myPrice: parsed.salesPrice,
+            percentile,
+            bandLabel,
+            aiLines
+          };
+        }),
+        new Promise((resolve) => setTimeout(resolve, 900))
+      ]);
+
+      setAnalysis(nextAnalysis);
+      setAnalysisSnapshot({
+        analysis: nextAnalysis,
+        parsed
+      });
+      setLastAnalyzedKey(analysisKey);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   return (
     <div className="space-y-6">
-      <section>
-        <h1 className="text-2xl font-semibold text-slate-900">Rekabet Analizi — Ürün Bazlı</h1>
-        <p className="mt-1 text-sm text-slate-600">Trendyol sonuçlarına göre fiyat bandını ve konumunu gör.</p>
-        <p className="mt-1 text-xs text-slate-500">Linki gir → senaryonu tamamla → analizi başlat</p>
+      <section className="space-y-1.5">
+        <h1 className="text-2xl font-semibold text-slate-900">Fiyat Konumu</h1>
+        <p className="text-sm text-slate-600">Ürün fiyatını benzer sonuçlarla karşılaştırarak pazardaki konumunu ve kârlılığını değerlendir.</p>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-6">
           <section className="card p-6">
             <div className="card-header">
@@ -119,17 +209,6 @@ export default function CompetitionProductPage() {
                 />
               </label>
               <label className="space-y-1.5 text-sm text-slate-700">
-                <span>Hedef Kâr (₺)</span>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  className="input"
-                  value={form.targetProfit}
-                  onChange={(event) => setForm((prev) => ({ ...prev, targetProfit: event.target.value }))}
-                />
-              </label>
-              <label className="space-y-1.5 text-sm text-slate-700">
                 <span>Komisyon (%)</span>
                 <input
                   type="number"
@@ -141,6 +220,41 @@ export default function CompetitionProductPage() {
                   onChange={(event) => setForm((prev) => ({ ...prev, commissionRate: event.target.value }))}
                 />
                 {!parsed.commissionValid ? <p className="error-text text-xs text-rose-600">Komisyon %100 üstü olamaz.</p> : null}
+              </label>
+              <label className="space-y-1.5 text-sm text-slate-700">
+                <span>Kargo (₺)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  className="input"
+                  value={form.shippingCost}
+                  placeholder="Varsa kargo maliyeti"
+                  onChange={(event) => setForm((prev) => ({ ...prev, shippingCost: event.target.value }))}
+                />
+              </label>
+              <label className="space-y-1.5 text-sm text-slate-700">
+                <span>Reklam (₺)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  className="input"
+                  value={form.advertisingCost}
+                  placeholder="Varsa reklam maliyeti"
+                  onChange={(event) => setForm((prev) => ({ ...prev, advertisingCost: event.target.value }))}
+                />
+              </label>
+              <label className="space-y-1.5 text-sm text-slate-700">
+                <span>Hedef Kâr (₺)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  className="input"
+                  value={form.targetProfit}
+                  onChange={(event) => setForm((prev) => ({ ...prev, targetProfit: event.target.value }))}
+                />
               </label>
             </div>
           </section>
@@ -167,38 +281,79 @@ export default function CompetitionProductPage() {
               {form.productUrl.trim().length === 0 ? (
                 <p className="helper-text text-xs text-slate-500">Örnek: https://www.trendyol.com/marka/urun-adi-p-123456</p>
               ) : linkValidation.ok ? (
-                <p className="success-text text-sm text-emerald-600">Geçerli Trendyol linki</p>
+                <p className="success-text text-xs text-emerald-600">Geçerli Trendyol linki</p>
               ) : (
-                <p className="error-text text-sm text-rose-600">Geçersiz link. Örnek: https://www.trendyol.com/marka/urun-adi-p-123456</p>
+                <p className="error-text text-xs text-rose-600">Geçersiz link. Örnek: https://www.trendyol.com/marka/urun-adi-p-123456</p>
               )}
 
-              <button type="button" className="btn btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50" onClick={onAnalyze} disabled={!canAnalyze}>
-                Analizi Başlat
+              <button type="button" className="btn btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50" onClick={onAnalyze} disabled={ctaState.disabled}>
+                <span className="inline-flex items-center gap-2">
+                  <Sparkles className="h-4 w-4" />
+                  <span>{ctaState.label}</span>
+                </span>
               </button>
+              {ctaState.helper ? <p className="helper-text text-xs text-slate-500">{ctaState.helper}</p> : null}
             </div>
           </section>
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-          <AiPanel items={(analysis?.aiLines ?? ['⏱️ Analiz için girdileri tamamlayın.']).map(mapAiLineToItem)} />
+          <AiPanel items={productAiItems} />
 
           <section className="card p-5">
-            <h3 className="card-title">Pazar Konumu</h3>
-            {analysis ? (
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="card-title">Pazar Konumu</h3>
+              {analysisSnapshot ? <ProductRankBadge statusLabel={productStatusLabel(analysisSnapshot.parsed)} /> : null}
+            </div>
+            {analysisSnapshot ? (
               <>
-                <p className="mt-1 text-sm text-slate-600">{analysis.bandLabel} (%{analysis.percentile})</p>
-                <div className="mt-4">
-                  <div className="relative h-2 rounded-full bg-slate-100">
-                    <RangeMarker left={positionPercent(analysis.lowerQuartile, analysis.min, analysis.max)} label="Alt Çeyrek" />
-                    <RangeMarker left={positionPercent(analysis.median, analysis.min, analysis.max)} label="Orta Değer" />
-                    <RangeMarker left={positionPercent(analysis.upperQuartile, analysis.min, analysis.max)} label="Üst Çeyrek" />
-                    <div className="absolute -top-1.5 h-5 w-1 -translate-x-1/2 rounded bg-slate-900" style={{ left: `${positionPercent(analysis.myPrice, analysis.min, analysis.max)}%` }} />
+                <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Net Kâr</p>
+                    <p className="mt-1 text-3xl font-semibold text-slate-900">{formatTry(estimatedNetProfit(analysisSnapshot.parsed))}</p>
                   </div>
-                  <div className="mt-3 flex justify-between gap-3 text-xs text-slate-500">
-                    <span>{formatTry(analysis.min)}</span>
-                    <span className="whitespace-nowrap font-medium text-slate-700">Senin fiyatın: {formatTry(analysis.myPrice)}</span>
-                    <span>{formatTry(analysis.max)}</span>
+                  <div className="text-right" />
+                </div>
+
+                <div className="mt-4 space-y-3 border-t border-slate-200 pt-4">
+                  <MetricRow label="Hedef Kâr" value={formatTry(analysisSnapshot.parsed.targetProfit)} />
+                  <MetricRow
+                    label={targetGapLabel(productTargetGap(analysisSnapshot.parsed))}
+                    value={formatTry(Math.abs(productTargetGap(analysisSnapshot.parsed)))}
+                    tone={productTargetGap(analysisSnapshot.parsed) <= 0 ? 'success' : 'warning'}
+                  />
+                  <MetricRow label="Satış Fiyatı" value={formatTry(analysisSnapshot.analysis.myPrice)} />
+                </div>
+
+                <div className="mt-5">
+                  <div className="grid grid-cols-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                    <BandSegment
+                      label="Alt Bant"
+                      value={formatTry(analysisSnapshot.analysis.lowerQuartile)}
+                      active={productBandKey(analysisSnapshot.analysis) === 'low'}
+                      tone="low"
+                    />
+                    <BandSegment
+                      label="Orta Bant"
+                      value={formatTry(analysisSnapshot.analysis.median)}
+                      active={productBandKey(analysisSnapshot.analysis) === 'mid'}
+                      tone="mid"
+                    />
+                    <BandSegment
+                      label="Üst Bant"
+                      value={formatTry(analysisSnapshot.analysis.upperQuartile)}
+                      active={productBandKey(analysisSnapshot.analysis) === 'high'}
+                      tone="high"
+                    />
                   </div>
+                </div>
+
+                <div className="mt-5 border-t border-slate-200 pt-4">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-indigo-500" />
+                    <p className="text-sm font-semibold text-slate-900">AI Analiz</p>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-600">{buildProductMarketComment(analysisSnapshot.analysis.bandLabel)}</p>
                 </div>
               </>
             ) : (
@@ -211,22 +366,15 @@ export default function CompetitionProductPage() {
   );
 }
 
-function RangeMarker({ left, label }: { left: number; label: string }) {
-  return (
-    <div className="absolute top-2 -translate-x-1/2" style={{ left: `${left}%` }}>
-      <div className="h-2 w-px bg-slate-300" />
-      <span className="mt-1 block whitespace-nowrap text-[10px] text-slate-500">{label}</span>
-    </div>
-  );
-}
-
 function parseProductInputs(form: ProductFormState) {
   const commissionRate = parseNumber(form.commissionRate);
   return {
     salesPrice: parseNumber(form.salesPrice),
     costPrice: parseNumber(form.costPrice),
-    targetProfit: parseNumber(form.targetProfit),
     commissionRate,
+    shippingCost: parseNumber(form.shippingCost),
+    advertisingCost: parseNumber(form.advertisingCost),
+    targetProfit: parseNumber(form.targetProfit),
     commissionValid: commissionRate >= 0 && commissionRate < 100
   };
 }
@@ -288,6 +436,8 @@ function buildProductAiLines({
   targetProfit,
   costPrice,
   commissionRate,
+  shippingCost,
+  advertisingCost,
   stats,
   bandLabel
 }: {
@@ -295,13 +445,15 @@ function buildProductAiLines({
   targetProfit: number;
   costPrice: number;
   commissionRate: number;
+  shippingCost: number;
+  advertisingCost: number;
   stats: ReturnType<typeof computeStats>;
   bandLabel: string;
 }) {
   const effectivePrice = myPrice;
   const commissionRateDecimal = clamp(commissionRate / 100, 0, 0.9999);
   const commission = effectivePrice * commissionRateDecimal;
-  const estimatedNet = effectivePrice - costPrice - commission;
+  const estimatedNet = effectivePrice - costPrice - commission - shippingCost - advertisingCost;
 
   const lines = [`🧭 Ürün fiyat konumu: ${bandLabel}.`];
 
@@ -378,10 +530,155 @@ function formatTry(value: number) {
   }).format(Number.isFinite(value) ? value : 0);
 }
 
-function mapAiLineToItem(line: string): AiPanelItem {
-  const trimmed = line.trim();
-  if (trimmed.startsWith('✅')) return { text: trimmed.replace(/^✅\s*/, ''), icon: 'check', tone: 'success' };
-  if (trimmed.startsWith('⚠️')) return { text: trimmed.replace(/^⚠️\s*/, ''), icon: 'alert', tone: 'warning' };
-  if (trimmed.startsWith('🧭')) return { text: trimmed.replace(/^🧭\s*/, ''), icon: 'target', tone: 'neutral' };
-  return { text: trimmed, icon: 'info', tone: 'neutral' };
+function buildProductAiItems({
+  snapshot
+}: {
+  snapshot: ProductAnalysisSnapshot | null;
+}): AiPanelItem[] {
+  if (!snapshot) {
+    return [
+      { icon: 'info', tone: 'neutral', text: 'Not: Analiz için urun linki ve senaryo alanlarını tamamlayın.' },
+      { icon: 'target', tone: 'neutral', title: 'Durum', reason: 'Ürünün pazardaki bandı analizden sonra burada özetlenir.', text: 'Durum' },
+      { icon: 'check', tone: 'neutral', title: 'Kârlılık', reason: 'Net kâr ve hedef farkı analiz sonrasında görünür olur.', text: 'Kârlılık' },
+      { icon: 'alert', tone: 'neutral', title: 'Risk', reason: 'Fiyat bandına göre dikkat edilmesi gereken notlar burada yer alır.', text: 'Risk' }
+    ];
+  }
+
+  const { analysis, parsed } = snapshot;
+  const netProfit = estimatedNetProfit(parsed);
+  const gap = productTargetGap(parsed);
+
+  return [
+    {
+      icon: 'target',
+      tone: gap <= 0 ? 'success' : netProfit >= 0 ? 'warning' : 'danger',
+      title: 'Durum',
+      reason:
+        gap <= 0
+          ? 'Hedef kâr karşılanıyor.'
+          : netProfit >= 0
+            ? 'Senaryo pozitif ama hedef kârın altında kalıyor.'
+            : 'Senaryo mevcut varsayımlarla zarar riski taşıyor.',
+      inlineTitle: true,
+      text: 'Durum'
+    },
+    {
+      icon: 'check',
+      tone: netProfit >= 0 ? 'success' : 'danger',
+      title: 'Kârlılık',
+      reason: `Tahmini net kâr ${formatTry(netProfit)} seviyesinde.`,
+      inlineTitle: true,
+      text: 'Kârlılık'
+    },
+    {
+      icon: 'alert',
+      tone: analysis.bandLabel === 'Pahalı Konum' ? 'warning' : analysis.bandLabel === 'Ucuz Konum' ? 'danger' : 'neutral',
+      title: 'Risk',
+      reason: buildProductRiskText(analysis.bandLabel, gap),
+      inlineTitle: true,
+      text: 'Risk'
+    }
+  ];
+}
+
+function estimatedNetProfit(parsed: ReturnType<typeof parseProductInputs>) {
+  const commission = parsed.salesPrice * clamp(parsed.commissionRate / 100, 0, 0.9999);
+  return parsed.salesPrice - parsed.costPrice - commission - parsed.shippingCost - parsed.advertisingCost;
+}
+
+function productTargetGap(parsed: ReturnType<typeof parseProductInputs>) {
+  return parsed.targetProfit - estimatedNetProfit(parsed);
+}
+
+function buildProductRiskText(bandLabel: string, gap: number) {
+  if (bandLabel === 'Pahalı Konum') {
+    return 'Fiyat üst banda yakın. Dönüşüm tarafını küçük testlerle izle.';
+  }
+  if (bandLabel === 'Ucuz Konum') {
+    return gap <= 0 ? 'Alt bantta görünürlük avantajı var; marjı korumaya odaklan.' : 'Alt bantta olsan da hedef kâr için marjı kontrol et.';
+  }
+  return 'Orta bant daha dengeli bir başlangıç sunar; küçük fiyat testleri yeterli olabilir.';
+}
+
+function buildProductMarketComment(bandLabel: string) {
+  if (bandLabel === 'Pahalı Konum') {
+    return 'Fiyatın pazarın üst bandına yakın görünüyor. Dönüşüm tarafını küçük testlerle izle.';
+  }
+  if (bandLabel === 'Ucuz Konum') {
+    return 'Fiyatın pazarın alt bandına yakın görünüyor. Görünürlük avantajını korurken marjı yakından izle.';
+  }
+  return 'Fiyatın orta seviyeye yakın. Bu seviye genelde daha dengeli bir başlangıç sunar.';
+}
+
+function MetricRow({
+  label,
+  value,
+  tone = 'neutral'
+}: {
+  label: string;
+  value: string;
+  tone?: 'neutral' | 'success' | 'warning';
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <p className="text-sm text-slate-600">{label}</p>
+      <p className={tone === 'success' ? 'text-sm font-semibold text-emerald-700' : tone === 'warning' ? 'text-sm font-semibold text-amber-700' : 'text-sm font-semibold text-slate-900'}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function BandSegment({
+  label,
+  value,
+  active,
+  tone
+}: {
+  label: string;
+  value: string;
+  active: boolean;
+  tone: 'low' | 'mid' | 'high';
+}) {
+  const activeClass =
+    tone === 'low'
+      ? 'bg-rose-100 text-rose-700'
+      : tone === 'mid'
+        ? 'bg-amber-100 text-amber-700'
+        : 'bg-emerald-100 text-emerald-700';
+
+  return (
+    <div className={`px-3 py-3 text-center ${active ? activeClass : 'bg-white text-slate-600'} ${tone !== 'high' ? 'border-r border-slate-200' : ''}`}>
+      <p className="text-[11px] font-medium uppercase tracking-[0.08em]">{label}</p>
+      <p className="mt-1 text-sm font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function ProductRankBadge({ statusLabel }: { statusLabel: string }) {
+  if (statusLabel === 'Hedefte') {
+    return <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">🟢 Hedefte</span>;
+  }
+  if (statusLabel === 'Sınırda') {
+    return <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">🟠 Sınırda</span>;
+  }
+  return <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">🔴 Zararda</span>;
+}
+
+function productBandKey(analysis: ProductAnalysisResult) {
+  if (analysis.myPrice < analysis.lowerQuartile) return 'low';
+  if (analysis.myPrice <= analysis.upperQuartile) return 'mid';
+  return 'high';
+}
+
+function productStatusLabel(parsed: ReturnType<typeof parseProductInputs>) {
+  const gap = productTargetGap(parsed);
+  const netProfit = estimatedNetProfit(parsed);
+  if (netProfit < 0) return 'Zararda';
+  if (gap <= 0) return 'Hedefte';
+  return 'Sınırda';
+}
+
+function targetGapLabel(distanceToTarget: number) {
+  return distanceToTarget <= 0 ? 'Hedefin Üzerinde' : 'Hedefe Kalan';
 }

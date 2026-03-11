@@ -204,8 +204,8 @@ export default function ComparePage() {
     <div className="space-y-6">
       <section className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Karşılaştırma</h1>
-          <p className="mt-1 text-sm text-slate-600">Tek ürün senaryosunda pazaryerlerini kârlılık açısından karşılaştırın.</p>
+          <h1 className="text-2xl font-semibold text-slate-900">Pazaryeri Karşılaştırma</h1>
+          <p className="mt-1 text-sm text-slate-600">Pazaryerleri arasında kârlılığı karşılaştırmak için senaryonu oluştur.</p>
         </div>
       </section>
 
