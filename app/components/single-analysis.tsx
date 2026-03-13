@@ -1,5 +1,6 @@
 'use client';
 
+import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
 
@@ -35,11 +36,18 @@ const VAT_PRESETS = [20, 10, 1] as const;
 
 export function SingleAnalysis() {
   const [values, setValues] = useState<SingleInput>(initialValues);
+  const [activeSlide, setActiveSlide] = useState(0);
   const isCustomVat = !VAT_PRESETS.includes(values.vatRate as (typeof VAT_PRESETS)[number]);
 
   const result = useMemo(() => calculate(values), [values]);
   const assistantMessage = useMemo(() => buildAssistant(result.status), [result.status]);
   const assistantItems = useMemo(() => toSingleAiPanelItems(assistantMessage, result.status), [assistantMessage, result.status]);
+  const carouselData = useMemo(() => buildCarouselData(values, result), [result, values]);
+  const slideMeta = [
+    { title: 'Özet' },
+    { title: 'Gider Dağılımı' },
+    { title: 'Başabaş ve Adet Bazlı Kâr' }
+  ];
 
   const onNumberChange = (key: keyof Omit<SingleInput, 'campaignEnabled'>, raw: string) => {
     const numeric = Number(raw);
@@ -242,27 +250,31 @@ export function SingleAnalysis() {
         <AiPanel items={assistantItems} />
 
         <section className="card p-6 lg:flex-1">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium text-slate-500">Net Kâr</p>
-              <p className="number-display mt-1 text-4xl font-semibold text-slate-900">{formatTry(result.netProfit)}</p>
-            </div>
-            <span className={statusBadgeClass(result.status)}>{statusLabel(result.status)}</span>
+          <div className="min-h-[360px]">
+            {activeSlide === 0 ? (
+              <SummarySlide
+                netProfit={result.netProfit}
+                netSales={result.netSales}
+                status={result.status}
+                highlights={carouselData.summary.highlights}
+                onSelectSlide={setActiveSlide}
+              />
+            ) : null}
+
+            {activeSlide === 1 ? <ExpenseSlide data={carouselData.expenses} /> : null}
+            {activeSlide === 2 ? <BreakEvenSlide data={carouselData.breakEven} /> : null}
           </div>
 
-          <div className="mt-5 space-y-3">
-            <MetricRow label="Net Satış (KDV Hariç)" value={formatTry(result.netSales)} />
-            <MetricRow label="Marj" value={`%${result.marginPct.toFixed(1)}`} />
-          </div>
-
-          <div className="mt-6 border-t border-slate-200 pt-4">
-            <h3 className="text-sm font-semibold text-slate-900">Tahmini Kâr Hacmi</h3>
-            <div className="mt-3 space-y-2">
-              <MetricRow label="50 adet" value={formatTry(result.netProfit * 50)} compact />
-              <MetricRow label="100 adet" value={formatTry(result.netProfit * 100)} compact />
-              <MetricRow label="250 adet" value={formatTry(result.netProfit * 250)} compact />
-            </div>
-            <p className="mt-3 text-xs text-slate-500">Aynı fiyat ve maliyet varsayımıyla hesaplanır.</p>
+          <div className="mt-4 flex items-center justify-center gap-2">
+            {slideMeta.map((slide, index) => (
+              <button
+                key={slide.title}
+                type="button"
+                onClick={() => setActiveSlide(index)}
+                className={`h-2.5 rounded-full transition ${index === activeSlide ? 'w-6 bg-[#10399c]' : 'w-2.5 bg-slate-300 hover:bg-slate-400'}`}
+                aria-label={`${index + 1}. kart: ${slide.title}`}
+              />
+            ))}
           </div>
 
           <p className="mt-4 text-xs text-slate-500">Satış fiyatı KDV dahil kabul edilir. Hesaplar anlık güncellenir.</p>
@@ -290,6 +302,193 @@ function MetricRow({ label, value, compact = false }: { label: string; value: st
   );
 }
 
+function SummarySlide({
+  netProfit,
+  netSales,
+  status,
+  highlights,
+  onSelectSlide
+}: {
+  netProfit: number;
+  netSales: number;
+  status: Status;
+  highlights: { title: string; text: string; slide: number }[];
+  onSelectSlide: (slide: number) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xl font-semibold text-slate-900">Özet</p>
+          <p className="mt-4 text-sm font-medium text-slate-500">Net Kâr</p>
+          <p className="number-display mt-1 text-4xl font-semibold text-slate-900">{formatTry(netProfit)}</p>
+        </div>
+        <span className={statusBadgeClass(status)}>{statusLabel(status)}</span>
+      </div>
+
+      <div className="space-y-3">
+        <MetricRow label="Net Satış (KDV Hariç)" value={formatTry(netSales)} />
+      </div>
+
+      <div className="space-y-3 border-t border-slate-200 pt-4">
+        <h3 className="text-sm font-semibold text-slate-900">Öne Çıkanlar</h3>
+        <div className="space-y-3">
+          {highlights.map((highlight) => (
+            <button
+              key={highlight.title}
+              type="button"
+              onClick={() => onSelectSlide(highlight.slide)}
+              className="flex w-full items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-left transition hover:border-slate-300 hover:bg-slate-100"
+            >
+              <div>
+                <p className="text-sm font-semibold text-slate-900">{highlight.title}</p>
+                <p className="mt-1 text-sm text-slate-600">{highlight.text}</p>
+              </div>
+              <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExpenseSlide({
+  data
+}: {
+  data: {
+    title: string;
+    expenses: { label: string; value: string; amount: number; color: string }[];
+    note: string;
+  };
+}) {
+  const total = data.expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const radius = 82;
+  let startAngle = -Math.PI / 2;
+
+  return (
+    <div className="space-y-2">
+      <div>
+        <p className="text-xl font-semibold text-slate-900">{data.title}</p>
+      </div>
+
+      <div className="space-y-1">
+        <div className="mb-[-18px] flex items-start justify-center -mt-1">
+          <div className="relative h-64 w-64">
+            <svg viewBox="0 0 200 200" className="h-full w-full">
+              {total > 0
+                ? data.expenses.map((expense) => {
+                    const sliceAngle = (expense.amount / total) * Math.PI * 2;
+                    const endAngle = startAngle + sliceAngle;
+                    const path = describePieSlice(100, 100, radius, startAngle, endAngle);
+                    const labelAngle = startAngle + sliceAngle / 2;
+                    const labelX = 100 + Math.cos(labelAngle) * radius * 0.68;
+                    const labelY = 100 + Math.sin(labelAngle) * radius * 0.68;
+                    const displayValue = formatCompactTry(expense.amount);
+                    startAngle = endAngle;
+
+                    return (
+                      <g key={expense.label}>
+                        <path d={path} fill={expense.color} stroke="#ffffff" strokeWidth="2" />
+                        <text
+                          x={labelX}
+                          y={labelY}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          className="fill-white text-[11px] font-semibold"
+                        >
+                          {displayValue}
+                        </text>
+                      </g>
+                    );
+                  })
+                : (
+                  <circle cx="100" cy="100" r={radius} fill="#e2e8f0" />
+                )}
+            </svg>
+          </div>
+        </div>
+
+        <div className="space-y-0.5">
+          {data.expenses.map((expense) => (
+            <div key={expense.label} className="flex items-center justify-between gap-4 border-b border-slate-100 py-1 last:border-b-0">
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: expense.color }} aria-hidden />
+                <p className="text-sm font-medium text-slate-700">{expense.label}</p>
+              </div>
+              <div className="text-right">
+                <p className="number-display text-sm font-semibold text-slate-900">{expense.value}</p>
+                <p className="text-xs font-medium text-slate-500">
+                  %{total > 0 ? Math.round((expense.amount / total) * 100) : 0}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="border-t border-slate-200 pt-1.5">
+          <div className="flex items-center justify-between gap-4 py-0.5">
+            <p className="text-sm font-medium text-slate-600">Toplam Gider</p>
+            <div className="text-right">
+              <p className="number-display text-sm font-semibold text-slate-900">{formatTry(total)}</p>
+              <p className="text-xs font-medium text-slate-500">%100</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
+        <p className="text-sm font-semibold text-slate-900">Not</p>
+        <p className="mt-2 text-sm text-slate-600">{data.note}</p>
+      </div>
+    </div>
+  );
+}
+
+function BreakEvenSlide({
+  data
+}: {
+  data: {
+    title: string;
+    unitProfit: string;
+    status: Status;
+    breakEven: string;
+    volumes: { label: string; value: string }[];
+  };
+}) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <p className="text-xl font-semibold text-slate-900">{data.title}</p>
+      </div>
+
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-slate-500">Birim Kâr</p>
+          <p className="number-display mt-1 text-4xl font-semibold text-slate-900">{data.unitProfit}</p>
+        </div>
+        <span className={statusBadgeClass(data.status)}>{statusLabel(data.status)}</span>
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">Başabaş Noktası</p>
+          <p className="mt-1 text-sm text-slate-600">{data.breakEven}</p>
+        </div>
+
+        <div className="border-t border-slate-200 pt-4">
+          <p className="text-sm font-semibold text-slate-900">Adet Bazlı Kâr</p>
+          <div className="mt-3 space-y-2">
+            {data.volumes.map((volume) => (
+              <MetricRow key={volume.label} label={volume.label} value={volume.value} compact />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function calculate(input: SingleInput) {
   const discountRate = input.campaignEnabled ? clamp(input.discountRate, 0, 100) : 0;
   const couponValue = input.campaignEnabled ? Math.max(0, input.couponValue) : 0;
@@ -310,6 +509,93 @@ function calculate(input: SingleInput) {
     netProfit,
     marginPct,
     status
+  };
+}
+
+function describePieSlice(cx: number, cy: number, radius: number, startAngle: number, endAngle: number) {
+  const startX = cx + radius * Math.cos(startAngle);
+  const startY = cy + radius * Math.sin(startAngle);
+  const endX = cx + radius * Math.cos(endAngle);
+  const endY = cy + radius * Math.sin(endAngle);
+  const largeArcFlag = endAngle - startAngle > Math.PI ? 1 : 0;
+
+  return [
+    `M ${cx} ${cy}`,
+    `L ${startX} ${startY}`,
+    `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${endX} ${endY}`,
+    'Z'
+  ].join(' ');
+}
+
+function buildCarouselData(input: SingleInput, result: ReturnType<typeof calculate>) {
+  const expenses = [
+    { label: `Komisyon (%${clamp(input.commissionRate, 0, 100)})`, amount: result.commission },
+    { label: 'Kargo', amount: Math.max(0, input.shippingCost) },
+    { label: 'Reklam', amount: Math.max(0, input.advertisingCost) },
+    { label: 'Maliyet', amount: Math.max(0, input.costPrice) }
+  ];
+
+  const dominantExpense = [...expenses].sort((a, b) => b.amount - a.amount)[0];
+  const expenseShare = result.netSales > 0 ? (dominantExpense.amount / result.netSales) * 100 : 0;
+  const breakEvenUnits =
+    result.netProfit > 0 && input.targetProfit > 0 ? Math.ceil(input.targetProfit / result.netProfit) : null;
+
+  return {
+    summary: {
+      title: 'Özet',
+      highlights: [
+        {
+          title: 'Gider Dağılımı',
+          text:
+            dominantExpense.amount <= 0
+              ? 'Belirgin bir gider baskısı görünmüyor.'
+              : `${dominantExpense.label} net satışın %${expenseShare.toFixed(0)} kadarını götürüyor.`,
+          slide: 1
+        },
+        {
+          title: 'Başabaş Noktası',
+          text: breakEvenUnits ? `Başabaş noktası: ${breakEvenUnits} satış` : 'Bu fiyatla başabaşa ulaşılamaz',
+          slide: 2
+        },
+        {
+          title: 'Adet Bazlı Kâr',
+          text: `100 satışta yaklaşık ${formatTry(result.netProfit * 100)} ${result.netProfit >= 0 ? 'kâr' : 'zarar'}`,
+          slide: 2
+        }
+      ]
+    },
+    expenses: {
+      title: 'Gider Dağılımı',
+      expenses: [...expenses]
+        .sort((a, b) => b.amount - a.amount)
+        .map((expense) => ({
+          label: expense.label,
+          value: formatTry(expense.amount),
+          amount: expense.amount,
+          color: expense.label.startsWith('Komisyon')
+            ? '#10399c'
+            : expense.label === 'Kargo'
+              ? '#f59e0b'
+              : expense.label === 'Reklam'
+                ? '#8b5cf6'
+                : '#0f766e'
+        })),
+      note:
+        dominantExpense.amount <= 0
+          ? 'Gider kalemleri şu an kârlılığı baskılamıyor.'
+          : `${dominantExpense.label} net satışın %${expenseShare.toFixed(0)} kadarını eritiyor.`
+    },
+    breakEven: {
+      title: 'Başabaş ve Adet Bazlı Kâr',
+      unitProfit: formatTry(result.netProfit),
+      status: result.status,
+      breakEven: breakEvenUnits ? `${breakEvenUnits} satış` : 'Bu fiyatla başabaşa ulaşılamaz',
+      volumes: [
+        { label: '50 adet', value: formatTry(result.netProfit * 50) },
+        { label: '100 adet', value: formatTry(result.netProfit * 100) },
+        { label: '250 adet', value: formatTry(result.netProfit * 250) }
+      ]
+    }
   };
 }
 
@@ -368,5 +654,13 @@ function formatTry(value: number): string {
     style: 'currency',
     currency: 'TRY',
     maximumFractionDigits: 2
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
+function formatCompactTry(value: number): string {
+  return new Intl.NumberFormat('tr-TR', {
+    style: 'currency',
+    currency: 'TRY',
+    maximumFractionDigits: 0
   }).format(Number.isFinite(value) ? value : 0);
 }
