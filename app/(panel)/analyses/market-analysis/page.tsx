@@ -307,7 +307,7 @@ export default function CompetitionPage() {
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
-        <section className="card p-6">
+        <section className="card min-h-[356px] p-6">
           <div className="card-header">
             <h2 className="card-title">Ürün Senaryosu</h2>
           </div>

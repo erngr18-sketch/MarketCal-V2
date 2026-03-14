@@ -180,14 +180,14 @@ export default function CompetitionProductPage() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-6">
-          <section className="card p-6">
+          <section className="card min-h-[356px] p-6">
             <div className="card-header">
               <h2 className="card-title">Ürün Senaryosu</h2>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-1.5 text-sm text-slate-700">
-                <span>Satış Fiyatın (₺)</span>
+                <span>Satış Fiyatı (₺)</span>
                 <input
                   type="number"
                   min={0}

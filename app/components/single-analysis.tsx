@@ -3,6 +3,7 @@
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
+import { calculateCompare } from '@/lib/profit/compare-engine';
 
 type SingleInput = {
   salesPrice: number;
@@ -43,11 +44,36 @@ export function SingleAnalysis() {
   const assistantMessage = useMemo(() => buildAssistant(result.status), [result.status]);
   const assistantItems = useMemo(() => toSingleAiPanelItems(assistantMessage, result.status), [assistantMessage, result.status]);
   const carouselData = useMemo(() => buildCarouselData(values, result), [result, values]);
+  const suggestedPrice = useMemo(() => {
+    const compareResult = calculateCompare({
+      rows: [
+        {
+          marketplaceId: 'single',
+          salesPrice: values.salesPrice,
+          costPrice: values.costPrice,
+          commissionRate: values.commissionRate,
+          shippingCost: values.shippingCost,
+          advertisingCost: values.advertisingCost,
+          targetProfit: values.targetProfit,
+          vatRate: values.vatRate,
+          discountRate: values.campaignEnabled ? values.discountRate : 0,
+          couponValue: values.campaignEnabled ? values.couponValue : 0
+        }
+      ]
+    });
+
+    return compareResult.rows[0]?.suggestedSalesPrice ?? 0;
+  }, [values]);
   const slideMeta = [
     { title: 'Özet' },
     { title: 'Gider Dağılımı' },
     { title: 'Başabaş ve Adet Bazlı Kâr' }
   ];
+  const showSuggestedPrice =
+    Number.isFinite(suggestedPrice) &&
+    suggestedPrice > 0 &&
+    Math.abs(suggestedPrice - values.salesPrice) >= 1 &&
+    result.status !== 'ok';
 
   const onNumberChange = (key: keyof Omit<SingleInput, 'campaignEnabled'>, raw: string) => {
     const numeric = Number(raw);
@@ -89,6 +115,13 @@ export function SingleAnalysis() {
   };
 
   const resetScenario = () => setValues(initialValues);
+  const applySuggestedPrice = () => {
+    if (!showSuggestedPrice) return;
+    setValues((prev) => ({
+      ...prev,
+      salesPrice: Math.round(suggestedPrice * 100) / 100
+    }));
+  };
 
   const onVatPresetSelect = (nextVatRate: number | 'custom') => {
     setValues((prev) => ({
@@ -257,6 +290,8 @@ export function SingleAnalysis() {
                 netSales={result.netSales}
                 status={result.status}
                 highlights={carouselData.summary.highlights}
+                suggestedPrice={showSuggestedPrice ? suggestedPrice : null}
+                onApplySuggestedPrice={applySuggestedPrice}
                 onSelectSlide={setActiveSlide}
               />
             ) : null}
@@ -307,12 +342,16 @@ function SummarySlide({
   netSales,
   status,
   highlights,
+  suggestedPrice,
+  onApplySuggestedPrice,
   onSelectSlide
 }: {
   netProfit: number;
   netSales: number;
   status: Status;
   highlights: { title: string; text: string; slide: number }[];
+  suggestedPrice: number | null;
+  onApplySuggestedPrice: () => void;
   onSelectSlide: (slide: number) => void;
 }) {
   return (
@@ -328,6 +367,21 @@ function SummarySlide({
 
       <div className="space-y-3">
         <MetricRow label="Net Satış (KDV Hariç)" value={formatTry(netSales)} />
+        {suggestedPrice ? (
+          <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-3">
+            <div>
+              <p className="text-sm text-slate-600">Önerilen Fiyat</p>
+              <p className="number-display mt-1 text-base font-semibold text-slate-900">{formatTry(suggestedPrice)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onApplySuggestedPrice}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            >
+              Uygula
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className="space-y-3 border-t border-slate-200 pt-4">
@@ -532,7 +586,7 @@ function buildCarouselData(input: SingleInput, result: ReturnType<typeof calcula
     { label: `Komisyon (%${clamp(input.commissionRate, 0, 100)})`, amount: result.commission },
     { label: 'Kargo', amount: Math.max(0, input.shippingCost) },
     { label: 'Reklam', amount: Math.max(0, input.advertisingCost) },
-    { label: 'Maliyet', amount: Math.max(0, input.costPrice) }
+    { label: 'Ürün Maliyeti', amount: Math.max(0, input.costPrice) }
   ];
 
   const dominantExpense = [...expenses].sort((a, b) => b.amount - a.amount)[0];
@@ -576,9 +630,9 @@ function buildCarouselData(input: SingleInput, result: ReturnType<typeof calcula
             ? '#10399c'
             : expense.label === 'Kargo'
               ? '#f59e0b'
-              : expense.label === 'Reklam'
-                ? '#8b5cf6'
-                : '#0f766e'
+                : expense.label === 'Reklam'
+                  ? '#8b5cf6'
+                  : '#0f766e'
         })),
       note:
         dominantExpense.amount <= 0
@@ -589,7 +643,7 @@ function buildCarouselData(input: SingleInput, result: ReturnType<typeof calcula
       title: 'Başabaş ve Adet Bazlı Kâr',
       unitProfit: formatTry(result.netProfit),
       status: result.status,
-      breakEven: breakEvenUnits ? `${breakEvenUnits} satış` : 'Bu fiyatla başabaşa ulaşılamaz',
+      breakEven: breakEvenUnits ? `${formatInteger(breakEvenUnits)} adet satış` : 'Bu fiyatla başabaşa ulaşılamaz',
       volumes: [
         { label: '50 adet', value: formatTry(result.netProfit * 50) },
         { label: '100 adet', value: formatTry(result.netProfit * 100) },
@@ -661,6 +715,12 @@ function formatCompactTry(value: number): string {
   return new Intl.NumberFormat('tr-TR', {
     style: 'currency',
     currency: 'TRY',
+    maximumFractionDigits: 0
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
+function formatInteger(value: number): string {
+  return new Intl.NumberFormat('tr-TR', {
     maximumFractionDigits: 0
   }).format(Number.isFinite(value) ? value : 0);
 }
