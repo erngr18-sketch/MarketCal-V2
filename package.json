@@ -6,6 +6,7 @@
     "prebuild": "npm run controlcheck",
     "controlcheck": "node scripts/control-check.mjs",
     "qa": "node scripts/qa-runner.mjs",
+    "test": "node --test tests/security-scenario-validation.test.ts",
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start -p 3001",

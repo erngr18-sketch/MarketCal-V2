@@ -3,6 +3,8 @@
 import { Sparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
+import { ScenarioSaveControl } from '@/app/components/scenario-save-control';
+import { normalizeFiniteNumber } from '@/lib/security/input-sanitize';
 
 type ProductMode = 'best_sellers' | 'most_reviewed';
 
@@ -360,6 +362,28 @@ export default function CompetitionProductPage() {
               <p className="mt-2 text-sm text-slate-500">Analiz sonrası fiyat konumu burada gösterilir.</p>
             )}
           </section>
+
+          <ScenarioSaveControl
+            type="price_position"
+            enabled={Boolean(analysisSnapshot)}
+            inputs={{
+              mode: form.mode,
+              salesPrice: analysisSnapshot?.parsed.salesPrice ?? parsed.salesPrice,
+              costPrice: analysisSnapshot?.parsed.costPrice ?? parsed.costPrice,
+              commissionRate: analysisSnapshot?.parsed.commissionRate ?? parsed.commissionRate,
+              shippingCost: analysisSnapshot?.parsed.shippingCost ?? parsed.shippingCost,
+              advertisingCost: analysisSnapshot?.parsed.advertisingCost ?? parsed.advertisingCost,
+              targetProfit: analysisSnapshot?.parsed.targetProfit ?? parsed.targetProfit,
+              productUrl: form.productUrl
+            }}
+            result={{
+              band: analysisSnapshot?.analysis.bandLabel ?? null,
+              netProfit: analysisSnapshot ? estimatedNetProfit(analysisSnapshot.parsed) : null,
+              targetGap: analysisSnapshot ? estimatedNetProfit(analysisSnapshot.parsed) - analysisSnapshot.parsed.targetProfit : null,
+              summary: analysisSnapshot ? analysisSnapshot.analysis.aiLines.join(' ') : null
+            }}
+            aiSummary={analysisSnapshot ? analysisSnapshot.analysis.aiLines.join(' ') : null}
+          />
         </aside>
       </div>
     </div>
@@ -493,8 +517,12 @@ function quantile(values: number[], q: number) {
 }
 
 function parseNumber(value: string) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+  return normalizeFiniteNumber(value, {
+    fallback: 0,
+    min: 0,
+    max: 100000000,
+    precision: 2
+  });
 }
 
 function round2(value: number) {

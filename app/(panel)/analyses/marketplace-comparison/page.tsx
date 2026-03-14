@@ -3,7 +3,9 @@
 import { X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
+import { ScenarioSaveControl } from '@/app/components/scenario-save-control';
 import { calculateCompare, formatCurrency, type CompareRowInput } from '@/lib/profit/compare-engine';
+import { normalizeFiniteNumber } from '@/lib/security/input-sanitize';
 
 const MARKETPLACES = [
   { id: 'trendyol', label: 'Trendyol', defaults: { commissionRate: 20, shippingCost: 10 } },
@@ -113,10 +115,9 @@ export default function ComparePage() {
   );
 
   const onGlobalChange = (key: keyof GlobalValues, raw: string) => {
-    const next = Number(raw);
     setGlobals((prev) => ({
       ...prev,
-      [key]: Number.isFinite(next) ? Math.max(0, next) : 0
+      [key]: normalizeFiniteNumber(raw, { fallback: 0, min: 0, max: 100000000, precision: 2 })
     }));
   };
 
@@ -136,8 +137,7 @@ export default function ComparePage() {
   };
 
   const onRowNumberChange = (index: number, key: 'commissionRate' | 'shippingCost' | 'discountRate' | 'couponValue', raw: string) => {
-    const numeric = Number(raw);
-    const safe = Number.isFinite(numeric) ? numeric : 0;
+    const safe = normalizeFiniteNumber(raw, { fallback: 0, min: 0, max: 100000000, precision: 2 });
 
     setRows((prev) =>
       prev.map((row, rowIndex) => {
@@ -410,6 +410,31 @@ export default function ComparePage() {
 
         <aside className="space-y-4 lg:sticky lg:top-6">
           <AiPanel items={assistantItems} />
+          <ScenarioSaveControl
+            type="marketplace_comparison"
+            enabled={result.rows.length > 0}
+            inputs={{
+              selectedMarketplaces: rows.map((row) => row.marketplaceId),
+              scenario: globals,
+              marketplaceAdjustments: rows.map((row) => ({
+                marketplaceId: row.marketplaceId,
+                commissionRate: row.commissionRate,
+                shippingCost: row.shippingCost,
+                advertisingCostOverride: row.advertisingCostOverride,
+                campaignEnabled: row.campaignEnabled,
+                discountRate: row.discountRate,
+                couponValue: row.couponValue
+              }))
+            }}
+            result={{
+              topMarketplace: topMarketplaceId,
+              totalNetProfit: result.summary.totalNetProfit,
+              averageNetProfit: result.summary.averageNetProfit,
+              riskyMarketplaceCount: result.summary.borderlineCount + result.summary.lossCount,
+              assistantSummary: result.summary.assistantMessage
+            }}
+            aiSummary={result.summary.assistantMessage}
+          />
         </aside>
       </div>
     </div>

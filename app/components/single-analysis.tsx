@@ -3,7 +3,9 @@
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
+import { ScenarioSaveControl } from '@/app/components/scenario-save-control';
 import { calculateCompare } from '@/lib/profit/compare-engine';
+import { normalizeFiniteNumber } from '@/lib/security/input-sanitize';
 
 type SingleInput = {
   salesPrice: number;
@@ -74,10 +76,19 @@ export function SingleAnalysis() {
     suggestedPrice > 0 &&
     Math.abs(suggestedPrice - values.salesPrice) >= 1 &&
     result.status !== 'ok';
+  const saveResult = useMemo(
+    () => ({
+      netProfit: result.netProfit,
+      targetGap: result.netProfit - values.targetProfit,
+      marginPct: result.marginPct,
+      suggestedSalesPrice: showSuggestedPrice ? suggestedPrice : result.netProfit > values.targetProfit ? values.salesPrice : suggestedPrice,
+      status: result.status
+    }),
+    [result.marginPct, result.netProfit, result.status, showSuggestedPrice, suggestedPrice, values.salesPrice, values.targetProfit]
+  );
 
   const onNumberChange = (key: keyof Omit<SingleInput, 'campaignEnabled'>, raw: string) => {
-    const numeric = Number(raw);
-    const safe = Number.isFinite(numeric) ? numeric : 0;
+    const safe = normalizeFiniteNumber(raw, { fallback: 0, min: 0, max: 100000000, precision: 2 });
 
     setValues((prev) => {
       const next: SingleInput = { ...prev, [key]: safe };
@@ -314,6 +325,25 @@ export function SingleAnalysis() {
 
           <p className="mt-4 text-xs text-slate-500">Satış fiyatı KDV dahil kabul edilir. Hesaplar anlık güncellenir.</p>
         </section>
+
+        <ScenarioSaveControl
+          type="profit_scenario"
+          enabled={values.salesPrice > 0}
+          inputs={{
+            salesPrice: values.salesPrice,
+            costPrice: values.costPrice,
+            commissionRate: values.commissionRate,
+            shippingCost: values.shippingCost,
+            advertisingCost: values.advertisingCost,
+            targetProfit: values.targetProfit,
+            vatRate: values.vatRate,
+            campaignEnabled: values.campaignEnabled,
+            discountRate: values.discountRate,
+            couponValue: values.couponValue
+          }}
+          result={saveResult}
+          aiSummary={assistantMessage.join(' ')}
+        />
       </aside>
     </div>
   );

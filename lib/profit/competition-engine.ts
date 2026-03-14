@@ -1,4 +1,4 @@
-import type { ProfitStatus } from '@/lib/profit/compare-engine';
+import type { ProfitStatus } from './compare-engine.ts';
 
 export type CompetitionMode = 'best_sellers' | 'most_reviewed';
 export type CompetitionDataSource = 'simulation' | 'manual';

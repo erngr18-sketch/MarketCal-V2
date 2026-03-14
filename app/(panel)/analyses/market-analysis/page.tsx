@@ -3,6 +3,7 @@
 import { Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { AiPanel, type AiPanelItem } from '@/app/components/ai-panel';
+import { ScenarioSaveControl } from '@/app/components/scenario-save-control';
 import {
   formatTry,
   runCompetition,
@@ -10,6 +11,7 @@ import {
   type CompetitionMode,
   type CompetitionOutput
 } from '@/lib/profit/competition-engine';
+import { normalizeFiniteNumber } from '@/lib/security/input-sanitize';
 
 const EXAMPLE_TRENDYOL_SR_URL = 'https://www.trendyol.com/sr?qt=kazak&st=kazak';
 
@@ -564,6 +566,37 @@ export default function CompetitionPage() {
               <p className="mt-2 text-sm text-slate-500">Fiyat konumu analizi başlattığınızda burada gösterilir.</p>
             )}
           </section>
+
+          <ScenarioSaveControl
+            type="market_analysis"
+            enabled={Boolean(analysisSnapshot)}
+            inputs={{
+              categoryUrl: analysisSnapshot?.manualOpen ? null : form.url,
+              mode: form.mode,
+              manualOpen: form.manualOpen,
+              manualPrices: form.manualOpen
+                ? {
+                    low: analysisSnapshot?.parsed.manualLow ?? parsed.manualLow,
+                    mid: analysisSnapshot?.parsed.manualMid ?? parsed.manualMid,
+                    high: analysisSnapshot?.parsed.manualHigh ?? parsed.manualHigh
+                  }
+                : null,
+              salesPrice: analysisSnapshot?.parsed.myPrice ?? parsed.myPrice,
+              costPrice: analysisSnapshot?.parsed.costPrice ?? parsed.costPrice,
+              commissionRate: analysisSnapshot?.parsed.commissionRate ?? parsed.commissionRate,
+              shippingCost: analysisSnapshot?.parsed.shippingCost ?? parsed.shippingCost,
+              advertisingCost: analysisSnapshot?.parsed.advertisingCost ?? parsed.advertisingCost,
+              targetProfit: analysisSnapshot?.parsed.targetProfit ?? parsed.targetProfit
+            }}
+            result={{
+              marketBand: analysisSnapshot?.result.bandLabel ?? null,
+              netProfit: analysisSnapshot?.profit.netProfit ?? null,
+              targetGap: analysisSnapshot ? analysisSnapshot.profit.netProfit - analysisSnapshot.parsed.targetProfit : null,
+              summary: analysisSnapshot?.result.assistantMessage ?? null,
+              sourceType: analysisSnapshot?.manualOpen ? 'manual' : 'simulation'
+            }}
+            aiSummary={analysisSnapshot?.result.assistantMessage ?? null}
+          />
         </aside>
       </div>
     </div>
@@ -732,8 +765,12 @@ function calculateProfitMetrics(parsed: ReturnType<typeof parseInputs>) {
 }
 
 function parseNumber(value: string): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+  return normalizeFiniteNumber(value, {
+    fallback: 0,
+    min: 0,
+    max: 100000000,
+    precision: 2
+  });
 }
 
 function clamp(value: number, min: number, max: number) {
